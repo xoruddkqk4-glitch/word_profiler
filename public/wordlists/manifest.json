@@ -1,0 +1,143 @@
+{
+  "version": "2.2.1-web.1",
+  "lists": [
+    {
+      "id": "builtin-gsl-1",
+      "name": "1_gsl_1st_1000",
+      "displayName": "1_gsl_1st_1000 (GSL 1st 1,000 Families)",
+      "category": "builtin",
+      "url": "/wordlists/builtin/1_gsl_1st_1000.txt",
+      "description": "West's General Service List — First 1,000 word families (998 headwords)"
+    },
+    {
+      "id": "builtin-gsl-2",
+      "name": "2_gsl_2nd_1000",
+      "displayName": "2_gsl_2nd_1000 (GSL 2nd 1,000 Families)",
+      "category": "builtin",
+      "url": "/wordlists/builtin/2_gsl_2nd_1000.txt",
+      "description": "West's General Service List — Second 1,000 word families (988 headwords)"
+    },
+    {
+      "id": "builtin-awl-570",
+      "name": "3_awl_570",
+      "displayName": "3_awl_570 (Coxhead Academic Word List)",
+      "category": "builtin",
+      "url": "/wordlists/builtin/3_awl_570.txt",
+      "description": "Averil Coxhead's Academic Word List — 570 academic word families (569 headwords)"
+    },
+    {
+      "id": "kr2015-fam-1",
+      "name": "4_basewrd1",
+      "displayName": "4_basewrd1 (초등 기초 800 패밀리)",
+      "category": "kr2015_family",
+      "url": "/wordlists/kr2015/4_basewrd1.txt",
+      "description": "2015 개정 교육과정 어휘 패밀리 1단계 — 기초 800 어휘 패밀리 (6,361 어형)"
+    },
+    {
+      "id": "kr2015-fam-2",
+      "name": "5_basewrd2",
+      "displayName": "5_basewrd2 (중고등 기본 1,200 패밀리)",
+      "category": "kr2015_family",
+      "url": "/wordlists/kr2015/5_basewrd2.txt",
+      "description": "2015 개정 교육과정 어휘 패밀리 2단계 — 기본 1,200 어휘 패밀리 (10,353 어형)"
+    },
+    {
+      "id": "kr2015-fam-3",
+      "name": "6_basewrd3",
+      "displayName": "6_basewrd3 (심화 1,000 패밀리)",
+      "category": "kr2015_family",
+      "url": "/wordlists/kr2015/6_basewrd3.txt",
+      "description": "2015 개정 교육과정 어휘 패밀리 3단계 — 심화 1,000 어휘 패밀리 (8,318 어형)"
+    },
+    {
+      "id": "kr2015-fam-all",
+      "name": "7_basewrd4",
+      "displayName": "7_basewrd4 (교육과정 통합 어형 25,031)",
+      "category": "kr2015_family",
+      "url": "/wordlists/kr2015/7_basewrd4.txt",
+      "description": "2015 개정 교육과정 전체 파생·굴절 어형 통합 리스트 (25,031 어형)"
+    },
+    {
+      "id": "kr2015-elem",
+      "name": "8_baseword5_초등",
+      "displayName": "8_baseword5_초등 (초등 권장 801 기본어휘)",
+      "category": "kr2015_school",
+      "url": "/wordlists/kr2015/8_baseword5_elementary.txt",
+      "description": "2015 개정 영어과 교육과정 초등학교 권장 기본어휘 801단어"
+    },
+    {
+      "id": "kr2015-sec",
+      "name": "9_baseword6_중등",
+      "displayName": "9_baseword6_중등 (중·고등 공통 1,850 기본어휘)",
+      "category": "kr2015_school",
+      "url": "/wordlists/kr2015/9_baseword6_secondary.txt",
+      "description": "2015 개정 영어과 교육과정 중·고등학교 일반선택 기본어휘 1,850단어"
+    },
+    {
+      "id": "kr2015-spec",
+      "name": "10_baseword7_전문",
+      "displayName": "10_baseword7_전문 (진로·전문교과 400 기본어휘)",
+      "category": "kr2015_school",
+      "url": "/wordlists/kr2015/10_baseword7_specialized.txt",
+      "description": "2015 개정 영어과 교육과정 진로·전문교과 기본어휘 400단어"
+    },
+    {
+      "id": "kr2015-annotated-all",
+      "name": "2015word_list_all",
+      "displayName": "2015word_list_all (교육과정 전체 주석본 3,036)",
+      "category": "kr2015_school",
+      "url": "/wordlists/kr2015/2015word_list_all.txt",
+      "description": "2015 개정 영어과 교육과정 기본어휘 전체 목록 (* 초등, ** 진로·전문 표기 포함)"
+    }
+  ],
+  "auxiliary": {
+    "builtinMasterFamilies": {
+      "name": "builtin_master_families.txt",
+      "url": "/wordlists/builtin/builtin_master_families.txt",
+      "description": "단일 기본형 리스트를 어휘 패밀리(굴절·파생형)로 자동 확장하기 위한 마스터 패밀리 사전 (3,461 패밀리 / 27,400 어형)"
+    }
+  },
+  "presets": [
+    {
+      "id": "gsl-awl",
+      "label": "Standard GSL + AWL",
+      "shortLabel": "GSL + AWL",
+      "description": "AntWordProfiler 기본 탑재 영어 핵심어휘 (GSL 1st 1,000 + GSL 2nd 1,000 + AWL 570)",
+      "listIds": ["builtin-gsl-1", "builtin-gsl-2", "builtin-awl-570"],
+      "enableBuiltinMaster": false
+    },
+    {
+      "id": "kr2015-family",
+      "label": "2015 개정 교육과정 (어휘 패밀리 1~3단계)",
+      "shortLabel": "2015 패밀리 (1~3단계)",
+      "description": "굴절·파생형이 모두 포함된 2015 교육과정 어휘 패밀리 (4_basewrd1 기초 800 + 5_basewrd2 기본 1,200 + 6_basewrd3 심화 1,000)",
+      "listIds": ["kr2015-fam-1", "kr2015-fam-2", "kr2015-fam-3"],
+      "enableBuiltinMaster": false
+    },
+    {
+      "id": "kr2015-school-expanded",
+      "label": "2015 개정 교육과정 (초등·중등·전문 + 패밀리 확장)",
+      "shortLabel": "2015 학교급별 (패밀리 확장)",
+      "description": "학교급별 기본어휘(초등 801 / 중등 1,850 / 전문 400)에 Master 패밀리 사전을 연동하여 굴절·파생형까지 함께 매칭",
+      "listIds": ["kr2015-elem", "kr2015-sec", "kr2015-spec"],
+      "enableBuiltinMaster": true
+    },
+    {
+      "id": "kr2015-school-exact",
+      "label": "2015 개정 교육과정 (초등·중등·전문 원형 일치)",
+      "shortLabel": "2015 학교급별 (원형만)",
+      "description": "학교급별 기본어휘(초등 801 / 중등 1,850 / 전문 400) 표제어 원형 그대로 일치 여부 검사 (Master 확장 해제)",
+      "listIds": ["kr2015-elem", "kr2015-sec", "kr2015-spec"],
+      "enableBuiltinMaster": false
+    },
+    {
+      "id": "combined-kr2015-awl",
+      "label": "2015 교육과정 패밀리 + AWL 학술어휘",
+      "shortLabel": "2015 패밀리 + AWL",
+      "description": "수능·학술 독해 지문 분석용: 2015 교육과정 3,000 패밀리 이후 남는 Coxhead 학술어휘(AWL 570) 비중까지 단계별 확인",
+      "listIds": ["kr2015-fam-1", "kr2015-fam-2", "kr2015-fam-3", "builtin-awl-570"],
+      "enableBuiltinMaster": false
+    }
+  ]
+}
+
