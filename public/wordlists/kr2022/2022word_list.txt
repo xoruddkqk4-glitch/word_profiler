@@ -1,0 +1,3283 @@
+a * 
+abandon 
+able ** 
+aboard 
+abort 
+abortion 
+abound 
+about * 
+above * 
+abroad 
+absent 
+absolute ** 
+absorb 
+abstract 
+absurd 
+abundant 
+abuse 
+academy 
+accelerate 
+accent ** 
+accept ** 
+access ** 
+accident ** 
+accommodate 
+accompany 
+accomplish 
+accord 
+account ** 
+accumulate 
+accurate 
+accuse ** 
+ache 
+achieve ** 
+acid 
+acknowledge 
+acquire 
+acquisition 
+across * 
+act * 
+actual 
+adapt ** 
+add * 
+addict 
+address * 
+adequate 
+adjust 
+administer 
+administration 
+admire ** 
+admission 
+admit ** 
+adolescent 
+adopt ** 
+adult * 
+advance ** 
+advantage ** 
+adventure ** 
+adverse 
+advertise ** 
+advertize ** 
+advice ** 
+advise ** 
+advocate 
+aeroplane * 
+aesthetic 
+affair ** 
+affect ** 
+affection 
+afford ** 
+afraid * 
+after * 
+afternoon * 
+again * 
+against * 
+age * 
+agency 
+agenda 
+agent ** 
+aggress 
+aggressive 
+ago * 
+agree * 
+agriculture 
+ahead * 
+aid ** 
+aim ** 
+air * 
+airline ** 
+airplane * 
+airport ** 
+alarm ** 
+album * 
+alcohol ** 
+alert 
+alien 
+alike 
+alive ** 
+all * 
+allocate 
+allow ** 
+ally 
+almost * 
+alone * 
+along * 
+alongside 
+aloud ** 
+already * 
+alright * 
+also * 
+alter ** 
+alternate 
+alternative 
+although ** 
+altogether ** 
+always * 
+amaze ** 
+ambassador 
+ambition 
+ambitious 
+ambulance ** 
+among ** 
+amount ** 
+amuse ** 
+an 
+analyse 
+analysis ** 
+analyze 
+anchor 
+ancient 
+and * 
+angel ** 
+anger ** 
+angle 
+animal * 
+anniversary 
+announce ** 
+annoy ** 
+annual ** 
+another * 
+answer * 
+ant ** 
+anticipate 
+anxiety 
+anxious ** 
+any * 
+apart ** 
+apartment * 
+apology 
+apparent 
+appeal ** 
+appear ** 
+apple * 
+applicant 
+apply ** 
+appoint ** 
+appreciate ** 
+approach ** 
+appropriate ** 
+approve 
+approximate 
+architect 
+architecture 
+area * 
+argue ** 
+arise 
+arm * 
+army ** 
+around * 
+arrange ** 
+arrest ** 
+arrive * 
+arrow 
+art * 
+article ** 
+artifice 
+artificial 
+as * 
+aside ** 
+ask * 
+asleep ** 
+aspect 
+aspire 
+assault 
+assemble 
+assert 
+assess ** 
+asset 
+assign ** 
+assignment 
+assist ** 
+assistant 
+associate ** 
+assume ** 
+assure 
+astonish 
+at * 
+athlete 
+atmosphere ** 
+atom 
+attach ** 
+attack ** 
+attempt ** 
+attend ** 
+attention ** 
+attitude ** 
+attract ** 
+attribute 
+auction 
+audience ** 
+aunt * 
+authentic 
+author 
+automatic ** 
+autumn * 
+avail 
+available 
+average ** 
+avoid ** 
+await 
+awake ** 
+award ** 
+aware ** 
+away * 
+awe 
+awful 
+awkward ** 
+baby * 
+back * 
+background ** 
+bacon ** 
+bad * 
+badminton * 
+bag * 
+bake * 
+balance ** 
+ball * 
+balloon ** 
+ban 
+banana * 
+band ** 
+bang ** 
+bank * 
+bankrupt 
+bar ** 
+bare ** 
+bargain 
+bark ** 
+barrier 
+base * 
+baseball * 
+basis ** 
+basket * 
+basketball * 
+bat * 
+bath * 
+battery ** 
+battle ** 
+bay ** 
+be * 
+beach * 
+beam 
+bean ** 
+bear * 
+beard 
+beast 
+beat ** 
+beauty * 
+because * 
+become * 
+bed * 
+bee * 
+beef * 
+beer ** 
+before * 
+beg ** 
+begin * 
+behalf 
+behave 
+behavior 
+behaviour 
+behind * 
+belief ** 
+believe * 
+bell * 
+belong ** 
+below * 
+belt * 
+bench ** 
+bend ** 
+beneath ** 
+benefit ** 
+beside * 
+bet ** 
+betray 
+between * 
+beyond ** 
+bias 
+big * 
+bike * 
+bill * 
+billion ** 
+bin ** 
+bind ** 
+biography 
+biology 
+bird * 
+birth * 
+biscuit * 
+bit ** 
+bite ** 
+bitter ** 
+black * 
+blame ** 
+blank ** 
+blanket ** 
+blast 
+blend 
+bless ** 
+blind ** 
+blink 
+block ** 
+blonde ** 
+blood * 
+bloom ** 
+blossom 
+blow ** 
+blue * 
+board * 
+boat * 
+body * 
+boil ** 
+bold 
+bomb ** 
+bond ** 
+bone * 
+book * 
+boom ** 
+boost 
+boot ** 
+border 
+bore ** 
+borrow * 
+boss ** 
+both * 
+bother ** 
+bottle * 
+bottom * 
+bounce ** 
+boundary 
+bow ** 
+bowl ** 
+box * 
+boy * 
+brain ** 
+brake ** 
+branch ** 
+brand ** 
+brave * 
+bread * 
+break * 
+breakfast * 
+breast ** 
+breath ** 
+breathe ** 
+breed 
+breeze 
+brick ** 
+bridge * 
+brief ** 
+bright * 
+brilliant ** 
+bring * 
+broad ** 
+broadcast 
+brother * 
+brown * 
+brush * 
+brutal 
+brute 
+bubble ** 
+budget ** 
+bug ** 
+build * 
+bulk 
+bull 
+bully 
+bump ** 
+bunch ** 
+bundle 
+burden 
+burn * 
+burst ** 
+bury ** 
+bus * 
+bush ** 
+business * 
+busy * 
+but * 
+butcher 
+butter * 
+button * 
+buy * 
+buzz 
+by * 
+bye 
+cable ** 
+cage ** 
+cake * 
+calculate ** 
+calculator 
+calendar ** 
+call * 
+calm ** 
+camera * 
+camp * 
+campaign * 
+can * 
+cancel 
+cancer 
+candidate 
+candy * 
+canvas 
+cap * 
+capable ** 
+cape ** 
+capital ** 
+captain ** 
+capture 
+car * 
+card * 
+care * 
+career ** 
+carpet ** 
+carrot * 
+carry * 
+cart ** 
+carve 
+case * 
+cash * 
+cast ** 
+castle ** 
+casual 
+cat * 
+catalog ** 
+catalogue ** 
+catch * 
+category ** 
+cater 
+cattle 
+causal 
+cause ** 
+caution 
+cave 
+cease 
+ceiling ** 
+celebrate 
+celebrity 
+cell ** 
+censor 
+center * 
+century ** 
+certain * 
+certificate 
+chain ** 
+chair * 
+chairman ** 
+challenge ** 
+chamber 
+champion ** 
+chance * 
+change * 
+channel ** 
+chaos 
+character ** 
+characteristic ** 
+charge ** 
+charity 
+charm ** 
+chart ** 
+chase ** 
+chat ** 
+cheap * 
+check * 
+cheek ** 
+cheer ** 
+cheese * 
+chef 
+chemical 
+cheque * 
+chest ** 
+chew ** 
+chicken * 
+chief ** 
+child * 
+chill 
+chin 
+chip ** 
+chocolate * 
+choice ** 
+choir 
+choose * 
+chop ** 
+chorus 
+chronic 
+church * 
+cigarette ** 
+cinema ** 
+circle * 
+circulate 
+circumstance ** 
+cite 
+citizen ** 
+city * 
+civil ** 
+claim ** 
+clap 
+clarify 
+clash 
+class * 
+classic 
+classify 
+clause 
+clay 
+clean * 
+clear * 
+clerk ** 
+clever * 
+click ** 
+client ** 
+cliff ** 
+climate ** 
+climb * 
+cling 
+clinic 
+clip ** 
+clock * 
+close * 
+clothes * 
+cloud * 
+club * 
+clue ** 
+cluster 
+coach ** 
+coal ** 
+coast ** 
+coat * 
+code ** 
+coffee * 
+coin ** 
+coincide 
+cold * 
+collaborate 
+collapse 
+collar 
+colleague 
+collect * 
+college * 
+colony 
+color * 
+colour * 
+column 
+combat 
+combine ** 
+come * 
+comedy ** 
+comfort ** 
+comfortable 
+comic * 
+command ** 
+comment ** 
+commerce ** 
+commission 
+commit 
+committee ** 
+commodity 
+common ** 
+communicate ** 
+communication 
+communist 
+community ** 
+companion 
+company * 
+compare ** 
+compatible 
+compel 
+compensate 
+compete 
+competent 
+compile 
+complain ** 
+complement 
+complete ** 
+complex ** 
+complexity 
+complicate ** 
+component 
+compose 
+compound 
+comprehend 
+comprehensive 
+comprise 
+compromise 
+compute * 
+computer 
+conceal 
+conceive 
+concentrate ** 
+concept ** 
+concern ** 
+concert ** 
+conclude 
+concrete 
+condemn 
+condition * 
+conduct 
+confer 
+confess 
+confide 
+confident 
+confine 
+confirm ** 
+conflict ** 
+conform 
+confront 
+confuse ** 
+congratulate * 
+congress 
+connect ** 
+conscience 
+conscious ** 
+consent 
+conserve 
+consider ** 
+consist 
+consistent 
+constant ** 
+constitute 
+constitution 
+constrain 
+construct 
+construction 
+consult 
+consume ** 
+consumer 
+consumption 
+contact ** 
+contain ** 
+contemporary 
+contend 
+content ** 
+contest ** 
+context ** 
+continent 
+continue ** 
+contract ** 
+contradict 
+contrary 
+contrast 
+contribute ** 
+control * 
+controversy 
+convene 
+convenient 
+convention 
+conversation 
+converse ** 
+convert 
+convey 
+convict 
+convince ** 
+cook * 
+cookie * 
+cooky * 
+cool * 
+cooperate 
+coordinate 
+cop ** 
+cope ** 
+copy ** 
+copyright 
+cord 
+core 
+corn 
+corner * 
+corporate 
+corporation 
+correct ** 
+correspond 
+corridor 
+corrupt 
+cost * 
+costume 
+cottage ** 
+cotton ** 
+cough ** 
+could * 
+council ** 
+counsel 
+count ** 
+counter 
+counterpart 
+country * 
+countryside ** 
+county ** 
+couple * 
+coupon 
+courage 
+course * 
+court * 
+cousin * 
+cover * 
+cow * 
+crack ** 
+craft 
+crash ** 
+crawl ** 
+crayon * 
+craze 
+crazy 
+cream * 
+create ** 
+creature 
+credible 
+credit ** 
+creep 
+crew 
+crime ** 
+criminal 
+crisis ** 
+crisp ** 
+criterion 
+critic 
+criticise 
+criticism 
+criticize 
+crop 
+cross * 
+crowd ** 
+crown ** 
+crucial 
+cruel ** 
+cruise 
+crush 
+cry * 
+crystal 
+cultivate 
+culture * 
+cup * 
+cure ** 
+curiosity 
+curious ** 
+curl ** 
+currency 
+current ** 
+curriculum 
+curry 
+curse 
+curtain * 
+curve 
+custody 
+custom 
+customer * 
+cut * 
+cute ** 
+cycle ** 
+cyclist 
+cynical 
+dad 
+daddy 
+dairy 
+damage ** 
+damp 
+dance * 
+danger * 
+dare ** 
+dark * 
+darling ** 
+dash 
+data 
+database 
+date * 
+datum 
+daughter * 
+dawn ** 
+day * 
+dead * 
+deal ** 
+death * 
+debate ** 
+debt ** 
+decade 
+decay 
+decent 
+decide * 
+decision 
+deck ** 
+declare 
+declension 
+decline 
+decorate ** 
+decrease 
+dedicate 
+deep * 
+defeat 
+defence ** 
+defend 
+defendant 
+defense ** 
+deficiency 
+deficit 
+define ** 
+definite ** 
+degree ** 
+delay ** 
+delegate 
+delete 
+deliberate 
+delicate 
+delicious * 
+delight ** 
+deliver ** 
+demand ** 
+democracy 
+democrat 
+demon 
+demonstrate ** 
+dense 
+dentist ** 
+deny ** 
+depart 
+department 
+departure 
+depend ** 
+dependence 
+depict 
+deposit 
+depress ** 
+deprive 
+derive 
+descend 
+describe ** 
+description 
+desert ** 
+deserve ** 
+design * 
+designate 
+desire ** 
+desk * 
+despair 
+desperate ** 
+despite ** 
+destination 
+destine 
+destiny 
+destroy ** 
+destruct 
+destruction 
+detach 
+detail ** 
+detect ** 
+determine ** 
+develop ** 
+device 
+devil 
+devise 
+devote 
+diabetes 
+dialog * 
+dialogue * 
+diary ** 
+dictate 
+dictionary ** 
+die * 
+diet ** 
+differ 
+different 
+difficult * 
+dig ** 
+dignity 
+dimension 
+diminish 
+dine 
+dinner * 
+dip 
+diplomat 
+direct ** 
+dirt ** 
+dirty 
+disabled 
+disadvantage 
+disagree 
+disappear 
+disappoint ** 
+disaster 
+disc ** 
+discharge 
+discipline ** 
+disclose 
+discount 
+discourage 
+discourse 
+discover 
+discriminate 
+discuss * 
+disease 
+disgust ** 
+dish ** 
+disk 
+dismiss 
+disorder 
+displace 
+display ** 
+dispose 
+dispute 
+disrupt 
+distance ** 
+distinct 
+distinguish 
+distort 
+distract 
+distribute 
+district ** 
+disturb ** 
+dive ** 
+diverse 
+divide ** 
+divine 
+divorce ** 
+do * 
+doctor * 
+document ** 
+dog * 
+doll * 
+dolphin ** 
+domain 
+domestic ** 
+dominant 
+dominate 
+donate ** 
+door * 
+dose 
+dot 
+double * 
+doubt ** 
+doughnut * 
+down * 
+dozen ** 
+draft 
+drag ** 
+drain 
+drama ** 
+draw * 
+drawer 
+dread 
+dream * 
+dress * 
+drill 
+drink * 
+drive * 
+drop * 
+drown 
+drug ** 
+drum * 
+dry * 
+dual 
+duck * 
+due ** 
+dull 
+dump ** 
+during * 
+dust ** 
+duty ** 
+dwell 
+dynamic 
+each ** 
+eager 
+ear * 
+early * 
+earn ** 
+earth * 
+ease ** 
+east * 
+easy 
+eat * 
+economy ** 
+edge ** 
+edit ** 
+educate ** 
+effect ** 
+effective 
+efficient 
+effort ** 
+egg * 
+eight * 
+either ** 
+elaborate 
+elect ** 
+electric ** 
+electronic 
+elegant 
+element ** 
+elementary 
+elephant * 
+elevate 
+elevator 
+eleven * 
+eliminate 
+elite 
+else ** 
+embarrass ** 
+embassy 
+embody 
+embrace 
+emerge 
+emergence 
+emergency 
+emission 
+emit 
+emotion ** 
+emphasis 
+emphasize ** 
+empire ** 
+employ ** 
+empty ** 
+enclose 
+encounter 
+encourage 
+end * 
+endure 
+enemy ** 
+energy * 
+enforce 
+engage ** 
+engine ** 
+engineer ** 
+enhance 
+enjoy 
+enormous ** 
+enough * 
+enquire 
+enrol 
+enroll 
+ensure 
+enter * 
+enterprise 
+entertain ** 
+enthusiastic 
+entire ** 
+entitle 
+entry 
+envelope ** 
+environ 
+environment 
+envy 
+equal ** 
+equip 
+equipment 
+era 
+erase 
+eraser 
+erect 
+err 
+error 
+escape ** 
+especial ** 
+especially 
+essay ** 
+essence 
+essential 
+establish ** 
+estate 
+estimate ** 
+ethic 
+ethical 
+ethnic 
+evacuate 
+evaluate 
+even ** 
+evening * 
+event ** 
+eventually 
+ever ** 
+every * 
+evidence ** 
+evil ** 
+evitable 
+evolution 
+evolve 
+exact ** 
+exaggerate 
+exam 
+examination 
+examine ** 
+example * 
+exceed 
+excel 
+excellent 
+except ** 
+excess 
+exchange ** 
+excite ** 
+exclude 
+exclusive 
+excuse ** 
+executive 
+exercise * 
+exhaust ** 
+exhibit 
+exist ** 
+exit ** 
+exotic 
+expand ** 
+expect ** 
+expense ** 
+expensive 
+experience ** 
+experiment ** 
+expert ** 
+expertise 
+explain ** 
+explicit 
+explode 
+explore 
+export 
+expose ** 
+express ** 
+extend ** 
+extent 
+external 
+extinct 
+extra ** 
+extract 
+extraordinary 
+extreme ** 
+eye * 
+eyebrow 
+fabric 
+face * 
+facilitate 
+facility 
+fact * 
+factor ** 
+factory ** 
+factual 
+faculty 
+fade 
+fail * 
+faint ** 
+fair ** 
+faith ** 
+fall * 
+false 
+fame 
+familiar ** 
+family * 
+famous 
+fan * 
+fancy ** 
+fantastic ** 
+far * 
+fare 
+farm * 
+fascinate ** 
+fashion ** 
+fast * 
+fasten 
+fat * 
+fatal 
+fate 
+father * 
+fault ** 
+favor ** 
+favorite * 
+favour ** 
+favourite * 
+fear ** 
+feature ** 
+federal 
+fee ** 
+feed ** 
+feel * 
+fellow ** 
+female ** 
+fence ** 
+ferry 
+fertile 
+festival * 
+fever ** 
+few ** 
+fiber 
+fibre 
+fiction 
+field * 
+fierce 
+fight * 
+figure ** 
+file * 
+fill * 
+film * 
+filter 
+final ** 
+finance ** 
+find * 
+fine * 
+finger * 
+finish * 
+finite 
+fire * 
+firm ** 
+first * 
+fish * 
+fit ** 
+five * 
+fix * 
+flag ** 
+flame ** 
+flash ** 
+flat ** 
+flavor 
+flavour 
+flaw 
+flee 
+flesh 
+flexible 
+flight ** 
+flip 
+float ** 
+flock 
+flood ** 
+floor * 
+flourish 
+flow ** 
+flower * 
+flush 
+fly * 
+focus * 
+fog ** 
+fold ** 
+folk ** 
+follow ** 
+fond 
+food * 
+fool * 
+foot * 
+football * 
+for * 
+forbid 
+force ** 
+forecast 
+forehead 
+foreign ** 
+forest * 
+forever ** 
+forget * 
+forgive ** 
+fork * 
+form * 
+formal 
+format 
+formation 
+former 
+formula 
+forth ** 
+fortunate ** 
+fortune ** 
+forward ** 
+foster 
+found ** 
+foundation 
+fountain 
+four * 
+fox * 
+fraction 
+frame ** 
+framework 
+frankly ** 
+free * 
+freeze ** 
+frequent 
+fresh * 
+friend * 
+friendship 
+fright ** 
+frog ** 
+from * 
+front * 
+frost 
+frown 
+fruit * 
+frustrate ** 
+fry ** 
+fuel 
+fulfil 
+full * 
+fun * 
+function ** 
+fund ** 
+fundamental 
+funeral 
+fur ** 
+furious 
+furnish 
+furniture ** 
+furthermore 
+fury 
+fuse 
+future * 
+gain ** 
+gallery 
+gamble 
+game * 
+gang 
+gap 
+garage ** 
+garden * 
+gas * 
+gasoline 
+gate ** 
+gather ** 
+gaze 
+gear ** 
+gender 
+gene 
+general ** 
+generate 
+generation 
+generous 
+genetic 
+genius 
+gentle ** 
+gentleman * 
+genuine 
+geography 
+geology 
+gesture ** 
+get * 
+ghost ** 
+giant ** 
+gift ** 
+giraffe ** 
+girl * 
+give * 
+glad * 
+glance ** 
+glare 
+glass * 
+global 
+globe 
+glory ** 
+glove ** 
+glow 
+glue ** 
+go * 
+goal * 
+goat 
+god * 
+gold * 
+golf ** 
+good * 
+goodbye * 
+goods 
+gorgeous ** 
+govern ** 
+government 
+grab ** 
+grace ** 
+grade ** 
+gradual 
+graduate 
+grain 
+grand ** 
+grandfather * 
+grant ** 
+grape * 
+graph ** 
+graphic 
+grasp 
+grass * 
+grateful 
+grave 
+gray * 
+great * 
+greed 
+green * 
+greet ** 
+grey * 
+grief 
+grip 
+grocery ** 
+gross 
+ground * 
+group * 
+grow * 
+guarantee ** 
+guard ** 
+guardian 
+guess * 
+guest ** 
+guide ** 
+guideline 
+guilt ** 
+guilty 
+guitar * 
+gulf 
+gum * 
+gun ** 
+guy * 
+gym 
+gymnasium 
+habit * 
+habitat 
+hair * 
+half ** 
+half-moon 
+hall ** 
+halt 
+hamburger * 
+hammer 
+hand * 
+handicap 
+handle ** 
+handsome ** 
+hang * 
+happen ** 
+happy * 
+harbor 
+harbour 
+hard * 
+hardly 
+harm ** 
+harmonious 
+harmony 
+harsh 
+harvest 
+hat * 
+hate * 
+haunt 
+have * 
+hazard 
+he * 
+head * 
+headache 
+headquarters 
+heal 
+health ** 
+healthy 
+hear ** 
+heart * 
+heat * 
+heaven ** 
+heavy * 
+heel 
+height ** 
+heir 
+helicopter ** 
+hell ** 
+hello * 
+helmet * 
+help * 
+hence 
+here * 
+heritage 
+hero * 
+hesitate ** 
+hey * 
+hi * 
+hide ** 
+hierarchy 
+high * 
+highlight 
+highway ** 
+hike * 
+hill * 
+hint ** 
+hire ** 
+history * 
+hit * 
+hobby * 
+hold * 
+hole ** 
+holiday * 
+holy 
+home * 
+homework * 
+honest * 
+honey ** 
+honor ** 
+honour ** 
+hook 
+hope * 
+horizon 
+horror 
+horse * 
+hospital * 
+host 
+hostile 
+hot * 
+hotel ** 
+hour * 
+house * 
+household 
+how * 
+however * 
+hug ** 
+huge ** 
+human * 
+humor ** 
+humour ** 
+hundred * 
+hunger ** 
+hungry 
+hunt * 
+hurry * 
+hurt ** 
+husband * 
+hut 
+hypothesis 
+I * 
+ice * 
+idea * 
+ideal 
+identical 
+identify 
+identity ** 
+ideology 
+if * 
+ignore ** 
+ill ** 
+illude 
+illusion 
+illustrate ** 
+image * 
+imagine ** 
+imitate 
+immediate ** 
+immense 
+immigrate 
+immune 
+impact 
+imperial 
+implement 
+imply 
+import 
+importance 
+important 
+impose 
+impress ** 
+improve ** 
+in * 
+incentive 
+incident 
+incline 
+include ** 
+income ** 
+incorporate 
+increase ** 
+incredible 
+indeed ** 
+independent 
+index 
+indicate ** 
+individual ** 
+induce 
+industry ** 
+inevitable 
+infant 
+infect 
+infer 
+inference 
+inflate 
+influence ** 
+inform ** 
+informal 
+ingredient 
+inhabit 
+inherent 
+inhibit 
+initial 
+inject 
+injure ** 
+inn 
+innocent ** 
+innovate 
+input 
+inquire 
+insect 
+insert 
+inside * 
+insight 
+insist ** 
+inspect ** 
+inspire 
+install 
+instance ** 
+instant ** 
+instead ** 
+instinct 
+institute 
+institution 
+instruct ** 
+instrument ** 
+insult 
+insurance 
+insure ** 
+integrate 
+intellect 
+intellectual 
+intelligent 
+intend ** 
+intense ** 
+intent ** 
+intention 
+interact 
+interest ** 
+interfere 
+interior 
+intermediate 
+internal ** 
+international 
+internet * 
+interpret 
+interrupt ** 
+interval 
+intervene 
+interview 
+intimate 
+into * 
+intrigue 
+introduce * 
+invade 
+invent ** 
+inventor 
+invest ** 
+investigate ** 
+invite * 
+involve ** 
+iron ** 
+irony 
+irritate 
+island ** 
+isolate 
+issue * 
+it * 
+item ** 
+jacket * 
+jail 
+jam * 
+jar 
+jaw ** 
+jeans ** 
+job * 
+jog 
+join * 
+joint 
+joke ** 
+journal 
+journey ** 
+joy ** 
+judge ** 
+juice * 
+jump * 
+junior ** 
+jury 
+just * 
+justice ** 
+keen 
+keep * 
+key * 
+kick * 
+kid * 
+kill * 
+kind * 
+king * 
+kiss * 
+kit 
+kitchen * 
+knee ** 
+knife * 
+knight 
+knock ** 
+knot 
+know * 
+knowledge ** 
+lab ** 
+label ** 
+labor ** 
+laboratory ** 
+labour ** 
+lack ** 
+ladder 
+lady * 
+lake * 
+lamb ** 
+lamp ** 
+land * 
+landscape 
+lane ** 
+language ** 
+lap 
+large * 
+laser * 
+last * 
+late * 
+latter 
+laugh ** 
+launch 
+laundry 
+law ** 
+lawn ** 
+lawyer ** 
+lay ** 
+layer 
+lazy * 
+lead ** 
+leaf ** 
+league ** 
+leak 
+lean ** 
+leap ** 
+learn * 
+lease 
+leather 
+leave ** 
+lecture 
+left * 
+leg * 
+legal ** 
+legend 
+legislate 
+legitimate 
+leisure 
+lemon ** 
+lend ** 
+lesson * 
+let ** 
+letter * 
+level ** 
+liberal 
+liberty 
+library * 
+licence ** 
+license ** 
+lid ** 
+lie * 
+life * 
+lift ** 
+light * 
+like * 
+likely 
+likewise 
+limit ** 
+line * 
+linguistic 
+link ** 
+lion * 
+lip * 
+liquid 
+list ** 
+listen * 
+literal 
+literature 
+little * 
+live * 
+livingroom ** 
+load ** 
+loan ** 
+local ** 
+locate ** 
+lock ** 
+log ** 
+logic 
+lone 
+long * 
+look * 
+loose ** 
+lose ** 
+loss ** 
+lot ** 
+loud ** 
+love * 
+low * 
+loyal 
+luck * 
+lump 
+lunch * 
+luxury 
+machine ** 
+mad * 
+magazine ** 
+magic ** 
+magnet 
+magnificent 
+mail * 
+main ** 
+maintain ** 
+major ** 
+majority 
+make * 
+male ** 
+man * 
+manage ** 
+manifest 
+manipulate 
+manner ** 
+manufacture ** 
+many * 
+map * 
+marathon * 
+margin 
+marine 
+mark ** 
+market * 
+marry * 
+marvel ** 
+mask ** 
+mass ** 
+master ** 
+match ** 
+mate ** 
+material 
+math * 
+mathematics * 
+maths * 
+matter ** 
+mature 
+maximum ** 
+may * 
+maybe ** 
+mayor 
+meal ** 
+mean ** 
+meanwhile 
+measure ** 
+meat * 
+mechanic 
+mechanism 
+medal * 
+media 
+mediate 
+medical ** 
+medicine ** 
+medieval 
+medium 
+meet * 
+melon ** 
+melt ** 
+member * 
+membership 
+memory * 
+mental ** 
+mention ** 
+menu ** 
+merchant 
+mere 
+merge 
+merit 
+mess ** 
+message ** 
+metal ** 
+method ** 
+metropolitan 
+microphone 
+microwave ** 
+middle * 
+might * 
+migrant 
+migrate 
+mild 
+military ** 
+milk * 
+mill ** 
+million 
+mind * 
+mine 
+miner 
+mineral 
+minimal 
+minimum 
+ministry 
+minor ** 
+minute ** 
+miracle 
+mirror ** 
+miss * 
+missile 
+mission ** 
+mistake 
+mix ** 
+mobile 
+mock 
+mode 
+model * 
+moderate 
+modern ** 
+modest 
+modify 
+moist 
+moisture 
+molecule 
+mom 
+moment ** 
+mommy 
+money * 
+monitor ** 
+monkey * 
+monster 
+month * 
+monument 
+mood ** 
+moon * 
+moral ** 
+moreover ** 
+morning * 
+mortal 
+mother * 
+motion ** 
+motive 
+motor ** 
+mount ** 
+mountain * 
+mouse * 
+mouth * 
+move * 
+movie * 
+much * 
+mud ** 
+multiple 
+murder 
+muscle ** 
+museum ** 
+mushroom ** 
+music * 
+must * 
+mutual 
+mystery ** 
+myth 
+nail ** 
+naive 
+naked 
+name * 
+narrate 
+narrow ** 
+nasty 
+nation * 
+native ** 
+nature * 
+navy ** 
+nay * 
+near * 
+neat ** 
+necessary ** 
+neck * 
+need * 
+needle 
+negate 
+negative 
+neglect 
+negotiate 
+neighbor ** 
+neighbour ** 
+neither ** 
+nephew 
+nerve ** 
+nervous 
+nest ** 
+net ** 
+network 
+neutral 
+never * 
+nevertheless 
+new * 
+news * 
+newspaper * 
+next * 
+nice * 
+night * 
+nightmare 
+nine * 
+no * 
+noble 
+nod 
+noise ** 
+nominate 
+none ** 
+nonetheless 
+noon ** 
+nope * 
+nor ** 
+norm 
+normal 
+north * 
+nose * 
+not * 
+note * 
+notebook * 
+nothing * 
+notice ** 
+notion 
+novel 
+now * 
+nowadays ** 
+nowhere ** 
+nuclear 
+number * 
+numerous 
+nurse * 
+nut ** 
+oak ** 
+obey 
+object ** 
+objective 
+oblige 
+observe ** 
+obsess 
+obtain 
+obvious ** 
+occasion ** 
+occupation 
+occupy 
+occur ** 
+occurrence 
+ocean ** 
+odd ** 
+of * 
+off * 
+offend 
+offer ** 
+office * 
+officer ** 
+official 
+often * 
+oil * 
+OK * 
+okay * 
+okey * 
+old * 
+on * 
+once ** 
+one * 
+only * 
+open * 
+opera ** 
+operate ** 
+opinion ** 
+opportune 
+opportunity 
+oppose ** 
+opt 
+optimist 
+option 
+or * 
+oral 
+orange * 
+orbit 
+orchestra 
+order ** 
+ordinary ** 
+organ 
+organic 
+organise 
+organize 
+orient 
+orientation 
+origin 
+original 
+other ** 
+otherwise ** 
+ought ** 
+out * 
+outcome 
+outline 
+output 
+outrage 
+outstanding 
+oven ** 
+over * 
+overall ** 
+overcome 
+overhead 
+overlap 
+overlook 
+overnight 
+oversea 
+overseas 
+overwhelm 
+owe 
+own ** 
+pace 
+pack ** 
+pad 
+page * 
+pain ** 
+paint * 
+pair ** 
+palace ** 
+pale 
+palm 
+pan ** 
+panel 
+panic ** 
+pants * 
+paper * 
+parade ** 
+paragraph ** 
+parallel 
+pardon ** 
+parent * 
+park * 
+parliament 
+part * 
+participate 
+particle 
+particular ** 
+particularly 
+partner * 
+party * 
+pass * 
+passage 
+passenger 
+passion 
+passport 
+past ** 
+pat 
+patch 
+patent 
+path ** 
+patient ** 
+pattern ** 
+pause ** 
+pave 
+pay * 
+peace ** 
+peaceful 
+peak 
+pear ** 
+peasant 
+peel 
+peer 
+pen * 
+penalty 
+pencil * 
+people * 
+pepper ** 
+per ** 
+perceive 
+perception 
+perfect ** 
+perform ** 
+perhaps ** 
+period ** 
+permanent 
+permit 
+persist 
+person ** 
+personality 
+perspective 
+persuade 
+pet ** 
+petrol 
+phase 
+phenomenon 
+philosophy 
+phone * 
+photo ** 
+photograph ** 
+phrase 
+physical ** 
+physics 
+piano * 
+pick * 
+picnic ** 
+picture * 
+pie ** 
+piece ** 
+pig * 
+pile ** 
+pill 
+pilot * 
+pin ** 
+pinch 
+pine ** 
+pink * 
+pioneer 
+pipe ** 
+pitch ** 
+pity ** 
+pizza * 
+place * 
+plain ** 
+plan * 
+plane ** 
+planet ** 
+plant ** 
+plastic * 
+plate ** 
+platform 
+play * 
+pleasant 
+please * 
+pleasure 
+plenty ** 
+plot 
+plus ** 
+pocket ** 
+poem ** 
+poet ** 
+point * 
+poison ** 
+polar 
+pole ** 
+police * 
+policy ** 
+polish 
+polite ** 
+politics ** 
+poll 
+pollute ** 
+pond 
+pool ** 
+poor * 
+pop ** 
+popular ** 
+populate 
+population 
+pork ** 
+port ** 
+portion 
+portrait 
+pose 
+posit 
+position 
+positive 
+possess ** 
+possible ** 
+post ** 
+poster 
+pot ** 
+potato * 
+potential ** 
+pour ** 
+powder ** 
+power * 
+practical ** 
+practice ** 
+practise ** 
+praise 
+pray ** 
+preach 
+precede 
+precise 
+predator 
+predict 
+prefer ** 
+pregnant ** 
+prejudice 
+premium 
+prepare ** 
+prescribe 
+presence ** 
+present * 
+preserve 
+preside 
+president 
+press ** 
+presume 
+pretend ** 
+pretty * 
+prevail 
+prevent ** 
+previous ** 
+prey 
+price ** 
+pride ** 
+priest 
+primary 
+prime ** 
+primitive 
+prince * 
+principal 
+principle ** 
+print * 
+prior 
+prison ** 
+privacy ** 
+private ** 
+privilege 
+prize ** 
+probable ** 
+probably 
+problem * 
+procedure 
+proceed ** 
+process ** 
+produce ** 
+profession ** 
+professor 
+profile 
+profit ** 
+profound 
+program * 
+programmatic 
+programme * 
+progress ** 
+prohibit 
+project * 
+prominent 
+promise ** 
+promote ** 
+prompt 
+pronounce ** 
+pronunciation 
+proof 
+proper ** 
+property ** 
+proportion 
+propose ** 
+prospect 
+prosper 
+protect ** 
+protein 
+protest ** 
+proud ** 
+prove ** 
+provide ** 
+province 
+provoke 
+psychology 
+pub ** 
+public ** 
+publish 
+publisher 
+pull ** 
+pump ** 
+punch ** 
+punish ** 
+pupil 
+puppy * 
+purchase ** 
+pure ** 
+purple ** 
+purpose ** 
+pursue 
+push * 
+put * 
+puzzle ** 
+qualify 
+quality ** 
+quantity 
+quarter ** 
+queen * 
+question * 
+questionnaire 
+quick * 
+quiet * 
+quit ** 
+quite ** 
+quiz * 
+quote ** 
+rabbit * 
+race * 
+racial 
+radio * 
+rage 
+rail ** 
+rain * 
+rainbow ** 
+raise ** 
+rally 
+random 
+range ** 
+rank 
+rapid ** 
+rare ** 
+rat ** 
+rate ** 
+rather ** 
+rational 
+raw 
+reach ** 
+react ** 
+read * 
+ready * 
+real ** 
+realise 
+realize 
+rear 
+reason ** 
+reasonable 
+rebel 
+receipt 
+receive ** 
+recent ** 
+reception 
+recipe ** 
+recognize ** 
+recommend ** 
+record ** 
+recover ** 
+recreation * 
+recruit 
+recycle 
+red * 
+reduce ** 
+refer ** 
+refine 
+reflect ** 
+reform 
+refrigerate 
+refrigerator 
+refuse ** 
+regard ** 
+region ** 
+register ** 
+regret 
+regular ** 
+regulate 
+reinforce 
+reject 
+relate ** 
+relation 
+relationship 
+relative 
+relax ** 
+release ** 
+relevant 
+relief ** 
+relieve 
+religion 
+reluctant 
+rely ** 
+remain ** 
+remark ** 
+remedy 
+remember * 
+remind ** 
+remote 
+remove ** 
+rent ** 
+repair ** 
+repeat ** 
+replace ** 
+reply ** 
+report ** 
+represent ** 
+republic 
+reputation 
+request ** 
+require ** 
+rescue 
+research ** 
+resemble 
+reserve ** 
+reside 
+resident 
+resign 
+resist ** 
+resolve 
+resort 
+resource ** 
+respect ** 
+respective 
+respond ** 
+responsible ** 
+rest ** 
+restaurant * 
+restore 
+restrain 
+restrict 
+restroom * 
+result ** 
+resume 
+retail 
+retain 
+retire ** 
+retreat 
+return * 
+reveal 
+revenge 
+reverse 
+review 
+revise 
+revive 
+revolution 
+reward 
+rhythm 
+ribbon * 
+rice ** 
+rich * 
+rid 
+ride ** 
+ridicule 
+ridiculous 
+right * 
+ring * 
+riot 
+rise ** 
+risk ** 
+rival 
+river * 
+road * 
+roar 
+roast 
+rob ** 
+robot * 
+rock * 
+rocket ** 
+rod 
+role ** 
+roll ** 
+romantic 
+roof ** 
+room * 
+root ** 
+rope ** 
+rose * 
+rot 
+rough ** 
+round ** 
+route ** 
+routine 
+row ** 
+royal ** 
+rub ** 
+rubber 
+rude ** 
+ruin ** 
+rule ** 
+rumor 
+rumour 
+run * 
+rural 
+rush ** 
+sack 
+sacred 
+sacrifice 
+sad * 
+safe * 
+sail ** 
+salad * 
+salary ** 
+sale * 
+salt * 
+same * 
+sample ** 
+sand * 
+sandwich * 
+satellite 
+satisfy ** 
+sauce ** 
+save * 
+say * 
+scale ** 
+scan 
+scandal 
+scarce 
+scare ** 
+scarf ** 
+scatter 
+scene ** 
+schedule ** 
+scheme 
+scholar 
+school * 
+science * 
+scissors * 
+scope 
+score * 
+scramble 
+scratch ** 
+scream ** 
+screen ** 
+screw 
+sculpt 
+sculpture 
+sea * 
+seal ** 
+search ** 
+season * 
+seat ** 
+second * 
+secondary 
+secret ** 
+secretary ** 
+section ** 
+sector 
+secure ** 
+see * 
+seed ** 
+seek ** 
+seem ** 
+seize 
+select ** 
+self ** 
+sell * 
+send * 
+senior ** 
+sensation 
+sense ** 
+sensible 
+sentence ** 
+sentiment 
+separate ** 
+sequence 
+series ** 
+serious ** 
+serve ** 
+service * 
+session ** 
+set * 
+settle ** 
+seven * 
+several ** 
+severe 
+sew ** 
+sex ** 
+shade ** 
+shadow ** 
+shake ** 
+shall ** 
+shallow 
+shame ** 
+shape ** 
+share ** 
+sharp ** 
+shave ** 
+she * 
+sheep ** 
+sheet ** 
+shelf ** 
+shell ** 
+shelter ** 
+shift ** 
+shine ** 
+ship * 
+shirt * 
+shock ** 
+shoe * 
+shoot ** 
+shop * 
+shore ** 
+short * 
+should * 
+shoulder ** 
+shout ** 
+show * 
+shower ** 
+shut ** 
+shy * 
+sick * 
+side * 
+sigh 
+sight ** 
+sign ** 
+significant 
+silent 
+silly ** 
+silver ** 
+similar ** 
+simple ** 
+simulate 
+simultaneous 
+sin 
+since ** 
+sing * 
+single ** 
+sink ** 
+sister * 
+sit * 
+site ** 
+situate ** 
+situation 
+six * 
+size * 
+skate * 
+ski * 
+skill ** 
+skin * 
+skip 
+skirt * 
+sky * 
+slave ** 
+sleep * 
+slice 
+slide ** 
+slight ** 
+slim 
+slip ** 
+slope 
+slow * 
+small * 
+smart ** 
+smash ** 
+smell * 
+smile * 
+smoke ** 
+smooth ** 
+snack ** 
+snake ** 
+snap ** 
+sneak 
+snow * 
+so * 
+soak 
+soap 
+soccer * 
+social ** 
+society ** 
+sociology 
+sock * 
+soft * 
+software * 
+soil ** 
+soldier ** 
+sole 
+solid ** 
+solve ** 
+some * 
+somewhat ** 
+son * 
+song * 
+soon ** 
+sophisticate 
+sore ** 
+sorry * 
+sort ** 
+soul ** 
+sound * 
+soup * 
+sour ** 
+source ** 
+south * 
+space * 
+spaghetti * 
+span 
+spare ** 
+spark 
+speak * 
+special 
+species ** 
+specific ** 
+spectacle 
+spectrum 
+speech ** 
+speed * 
+spell ** 
+spend ** 
+sphere 
+spill 
+spin ** 
+spirit ** 
+spit 
+splash 
+split 
+spoil ** 
+sponsor ** 
+spoon * 
+sport * 
+spot ** 
+spouse 
+spray ** 
+spread ** 
+spring * 
+spy ** 
+square ** 
+squeeze 
+stable ** 
+stack 
+staff * 
+stage ** 
+stain 
+stairs ** 
+stamp ** 
+stand * 
+standard ** 
+star * 
+stare ** 
+start * 
+starve 
+state ** 
+station ** 
+statistic 
+statue 
+status 
+stay * 
+steady ** 
+steak * 
+steal ** 
+steam ** 
+steel ** 
+steep 
+stem 
+step ** 
+stick ** 
+stiff 
+still ** 
+stimulate 
+stir ** 
+stitch 
+stock ** 
+stomach ** 
+stone * 
+stop * 
+store * 
+storm ** 
+story * 
+stove 
+straight ** 
+strain 
+strange ** 
+strategy ** 
+strawberry ** 
+stream ** 
+street * 
+stress ** 
+stretch ** 
+strict 
+strike ** 
+string ** 
+strip 
+stripe 
+stroke 
+strong * 
+structure ** 
+struggle ** 
+student 
+studio ** 
+study * 
+stuff ** 
+style * 
+subject ** 
+subjective 
+submarine 
+submission 
+submit 
+subscribe 
+substance 
+substantial 
+substitute 
+subtle 
+suburb 
+subway * 
+succeed ** 
+success ** 
+such ** 
+suck 
+sudden ** 
+suffer ** 
+suffice 
+sufficient 
+sugar * 
+suggest ** 
+suicide 
+suit ** 
+suite 
+sum ** 
+summary 
+summer * 
+summit 
+sun * 
+super ** 
+superb 
+superior 
+supervise 
+supper ** 
+supplement 
+supply ** 
+support ** 
+suppose ** 
+sure * 
+surface ** 
+surgery 
+surprise ** 
+surrender 
+surround ** 
+survey ** 
+survive ** 
+suspect ** 
+suspend 
+sustain 
+swallow ** 
+swear 
+sweat 
+sweater ** 
+sweep ** 
+sweet ** 
+swell 
+swift 
+swim * 
+swing ** 
+switch ** 
+symbol 
+sympathy 
+symphony 
+symptom 
+system ** 
+table * 
+tackle 
+tag 
+tail * 
+take * 
+tale ** 
+talent 
+talk * 
+tall * 
+tank ** 
+tap ** 
+tape * 
+target ** 
+task 
+taste * 
+tax ** 
+taxi * 
+tea ** 
+teach * 
+team * 
+tear ** 
+tease 
+technic ** 
+technique ** 
+technology ** 
+teenage ** 
+telegraph 
+telephone * 
+television * 
+tell * 
+temperature ** 
+temple 
+temporary 
+tempt 
+ten * 
+tenant 
+tend ** 
+tender 
+tennis * 
+tense ** 
+tent * 
+term ** 
+terminal 
+terminate 
+terrace 
+terrible ** 
+terrific 
+territory 
+terror 
+terrorist 
+test * 
+text ** 
+textbook * 
+than * 
+thank * 
+that * 
+the * 
+theater ** 
+theatre ** 
+theme 
+then ** 
+theory ** 
+therapy 
+there * 
+therefore ** 
+they * 
+thick ** 
+thief ** 
+thin ** 
+thing * 
+think * 
+third * 
+thirst * 
+thirteen * 
+thirty * 
+this * 
+thorough 
+though ** 
+thousand ** 
+thread 
+threat ** 
+three * 
+thrill 
+throat ** 
+through ** 
+throw ** 
+thumb 
+thus ** 
+tick 
+ticket * 
+tide ** 
+tidy 
+tie ** 
+tiger * 
+tight ** 
+till ** 
+timber 
+time * 
+tin ** 
+tiny ** 
+tip ** 
+tire * 
+tired 
+tissue 
+title ** 
+to * 
+toast ** 
+today * 
+toe ** 
+together * 
+toilet ** 
+tomato * 
+tomorrow * 
+tone ** 
+tongue ** 
+tonight * 
+too * 
+tool ** 
+tooth * 
+top * 
+topic ** 
+torture 
+toss 
+total ** 
+touch * 
+tough ** 
+tour ** 
+toward ** 
+towards ** 
+towel ** 
+tower ** 
+town * 
+toxic 
+toy * 
+trace ** 
+track * 
+trade ** 
+tradition ** 
+traffic ** 
+tragic 
+trail 
+train * 
+transact 
+transfer ** 
+transform 
+transition 
+translate 
+transmit 
+transport ** 
+transportation 
+trap ** 
+travel * 
+tray ** 
+treasure 
+treat ** 
+treaty 
+tree * 
+tremendous 
+trend 
+trial 
+triangle ** 
+tribe 
+trick ** 
+trigger 
+trim 
+trip * 
+triumph 
+troop 
+trouble ** 
+truck * 
+true * 
+trunk ** 
+trust ** 
+truth ** 
+try * 
+tube 
+tune ** 
+tunnel 
+turn * 
+turnover 
+twelve * 
+twenty * 
+twenty-first * 
+twenty-second * 
+twenty-third * 
+twice * 
+twin ** 
+twist ** 
+two * 
+type * 
+ugly * 
+ultimate 
+umbrella * 
+unaware 
+uncle * 
+under * 
+undergo 
+underlie 
+undermine 
+understand * 
+undertake 
+uniform ** 
+unify 
+union 
+unique 
+unit ** 
+unite ** 
+universe 
+university ** 
+unless ** 
+unprecedented 
+until ** 
+up * 
+update 
+upon ** 
+upper ** 
+upset ** 
+upward 
+upwards 
+urban 
+urge 
+urgent 
+use * 
+usual 
+utilise 
+utilize 
+utter 
+vacate 
+vacation 
+vaccine 
+vacuum 
+vague 
+valid 
+valley ** 
+value ** 
+van ** 
+vanish 
+various ** 
+vary ** 
+vast 
+vegetable * 
+vehicle ** 
+venture 
+verb 
+verbal 
+verse 
+version ** 
+versus 
+vertical 
+very * 
+vessel 
+veterinarian 
+via 
+vice 
+victim ** 
+victory 
+video * 
+view ** 
+vigor 
+vigorous 
+villa ** 
+village ** 
+violent ** 
+violin * 
+virgin 
+virtual 
+virtue 
+virus 
+visible 
+vision ** 
+visit * 
+visual 
+vital 
+vivid 
+vocabulary 
+vocation 
+voice * 
+volume ** 
+volunteer ** 
+vote ** 
+wage ** 
+wait * 
+wake * 
+walk * 
+wall * 
+wander 
+want * 
+war * 
+warehouse 
+warm * 
+warn ** 
+warrant 
+wash * 
+waste ** 
+watch * 
+water * 
+watermelon * 
+wave ** 
+way * 
+we * 
+weak ** 
+wealth 
+weapon ** 
+wear * 
+weather * 
+weave 
+website * 
+wedding * 
+weed 
+week * 
+weekend * 
+weigh ** 
+weight * 
+weird 
+welcome * 
+welfare 
+well * 
+west * 
+wet * 
+whale ** 
+what * 
+wheat 
+wheel ** 
+when * 
+where * 
+whereas 
+whether ** 
+which ** 
+while ** 
+whip 
+whisper ** 
+whistle ** 
+white * 
+who * 
+whole ** 
+why * 
+wicked 
+wide ** 
+wife * 
+wild ** 
+will * 
+win * 
+wind * 
+window * 
+wine * 
+wing ** 
+winter * 
+wipe ** 
+wire ** 
+wise ** 
+wish * 
+wit 
+with * 
+withdraw 
+within ** 
+without ** 
+witness 
+woman * 
+wonder ** 
+wood * 
+wool ** 
+word * 
+work * 
+world * 
+worry * 
+worship 
+worth ** 
+would ** 
+wound ** 
+wrap ** 
+wreck 
+write * 
+wrong * 
+yeah * 
+year * 
+yell ** 
+yellow * 
+yep * 
+yes * 
+yesterday * 
+yet ** 
+yield 
+you * 
+young * 
+zebra ** 
+zero ** 
+zone 
+zoo * 

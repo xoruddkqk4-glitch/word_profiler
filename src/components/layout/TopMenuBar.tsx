@@ -15,6 +15,7 @@ import {
   RotateCcw,
   Settings,
   ShieldCheck,
+  Sparkles,
   Sun,
   Upload,
 } from 'lucide-react';
@@ -629,7 +630,7 @@ export const TopMenuBar: React.FC = () => {
                   <>
                     <div className="menu-divider" />
                     <div className="menu-section-caption">
-                      Add Bundled List (GSL / AWL / 2015 교육과정)
+                      Add Bundled List (GSL / AWL / 2015·2022 교육과정)
                     </div>
                     {store.manifest.lists.map((l) => (
                       <button
@@ -669,7 +670,7 @@ export const TopMenuBar: React.FC = () => {
                     ) : (
                       <span style={{ width: 14, display: 'inline-block' }} />
                     )}
-                    Use Built-in Word-Family Master List (3,461 Families)
+                    Use Built-in Word-Family Master List (3,463 Families)
                   </span>
                 </button>
                 <button
@@ -734,11 +735,26 @@ export const TopMenuBar: React.FC = () => {
                   className="menu-item"
                   onClick={() => {
                     setOpenMenu(null);
-                    store.setSettingsModalOpen(true);
+                    store.setSettingsModalOpen(true, 'display');
                   }}
                 >
                   <span className="menu-item-left">
                     <Settings size={14} /> Global Settings...
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setOpenMenu(null);
+                    store.setSettingsModalOpen(true, 'ai');
+                  }}
+                >
+                  <span className="menu-item-left">
+                    <Sparkles size={14} /> AI Assistant (OpenRouter)...
+                  </span>
+                  <span className="menu-shortcut">
+                    {store.openRouterConfig.apiKey.trim() ? '연결됨' : '미설정'}
                   </span>
                 </button>
                 <div className="menu-divider" />

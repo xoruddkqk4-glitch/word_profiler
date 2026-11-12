@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -8,6 +8,7 @@ const mammothBrowserPath = fileURLToPath(
 );
 
 export default defineConfig({
+  base: './',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: [
@@ -22,5 +23,9 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['xlsx', 'jszip', 'docx'],
+  },
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
   },
 });

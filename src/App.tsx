@@ -3,13 +3,17 @@ import { BarChart3, FileSearch, UploadCloud, X } from 'lucide-react';
 import { LeftSidebar } from './components/layout/LeftSidebar';
 import { StatusBar } from './components/layout/StatusBar';
 import { TopMenuBar } from './components/layout/TopMenuBar';
+import { AiSuggestionModal } from './components/modals/AiSuggestionModal';
 import { CoverageContentModal } from './components/modals/CoverageContentModal';
 import { HelpAboutModal } from './components/modals/HelpAboutModal';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { ValidateListsModal } from './components/modals/ValidateListsModal';
 import { FileProfilerPane } from './components/profiler/FileProfilerPane';
 import { StatsViewerPane } from './components/stats/StatsViewerPane';
-import { readTargetFilesFromBrowser } from './io/fileReaders';
+import {
+  readTargetFilesFromBrowser,
+  readWordlistFilesFromBrowser,
+} from './io/fileReaders';
 import { useProfilerStore } from './store/useProfilerStore';
 
 export const App: React.FC = () => {
@@ -89,6 +93,22 @@ export const App: React.FC = () => {
     const files = e.dataTransfer.files;
     if (!files || files.length === 0) return;
 
+    const dropZone = (e.target as HTMLElement | null)?.closest?.(
+      '[data-drop-kind]',
+    ) as HTMLElement | null;
+    const kind = dropZone?.dataset.dropKind ?? 'target';
+
+    if (kind === 'wordlist') {
+      const { lists, errors } = await readWordlistFilesFromBrowser(files);
+      if (errors.length > 0) {
+        store.setErrorBanner(`${errors[0].fileName}: ${errors[0].reason}`);
+      }
+      if (lists.length > 0) {
+        await store.addCustomReferenceLists(lists);
+      }
+      return;
+    }
+
     const { items, errors } = await readTargetFilesFromBrowser(files);
     if (errors.length > 0) {
       store.setErrorBanner(`${errors[0].fileName}: ${errors[0].reason}`);
@@ -129,15 +149,16 @@ export const App: React.FC = () => {
       />
 
       {dragOverlay && (
-        <div className="app-drop-overlay">
-          <div className="app-drop-box">
-            <UploadCloud size={38} />
-            <div className="app-drop-title">
-              분석할 지문 파일을 여기에 놓으세요
-            </div>
-            <div className="app-drop-sub">
-              지원 형식: .txt · .docx · .pdf (브라우저 로컬 처리)
-            </div>
+        <div className="app-drop-overlay app-drop-overlay-split">
+          <div className="app-drop-box" data-drop-kind="target">
+            <UploadCloud size={34} />
+            <div className="app-drop-title">분석 지문 파일로 추가</div>
+            <div className="app-drop-sub">.txt · .docx · .pdf</div>
+          </div>
+          <div className="app-drop-box app-drop-box-lists" data-drop-kind="wordlist">
+            <UploadCloud size={34} />
+            <div className="app-drop-title">단어장(Reference List)으로 추가</div>
+            <div className="app-drop-sub">.txt · .tsv · .lst</div>
           </div>
         </div>
       )}
@@ -233,6 +254,7 @@ export const App: React.FC = () => {
       <ValidateListsModal />
       <CoverageContentModal />
       <HelpAboutModal />
+      <AiSuggestionModal />
     </div>
   );
 };

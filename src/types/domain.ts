@@ -120,7 +120,7 @@ export interface WordlistManifestEntry {
   id: string;
   name: string;
   displayName: string;
-  category: 'builtin' | 'kr2015_family' | 'kr2015_school';
+  category: 'builtin' | 'kr2015_family' | 'kr2015_school' | 'kr2022_school';
   url: string;
   description: string;
 }

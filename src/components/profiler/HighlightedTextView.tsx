@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, PlusCircle, Trash2 } from 'lucide-react';
+import {
+  Copy,
+  GitBranch,
+  PlusCircle,
+  Trash2,
+  Wand2,
+} from 'lucide-react';
 import { resolveTokenHighlight } from '../../core/colorPalette';
 import { useProfilerStore } from '../../store/useProfilerStore';
 import type { ProfileToken } from '../../types/domain';
@@ -9,6 +15,7 @@ interface ContextMenuState {
   x: number;
   y: number;
   token: ProfileToken;
+  tokenIdx: number;
 }
 
 export const HighlightedTextView: React.FC = () => {
@@ -61,11 +68,43 @@ export const HighlightedTextView: React.FC = () => {
   if (!profile) return null;
 
   const handleMouseUpSelection = () => {
-    const sel = window.getSelection()?.toString().trim();
-    if (sel && !/\s/.test(sel)) {
-      store.selectWordForInspector(sel);
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      return;
+    }
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    const range = selection.getRangeAt(0);
+    if (!container.contains(range.commonAncestorContainer)) return;
+
+    const spans = container.querySelectorAll<HTMLElement>('[data-tok-idx]');
+    let minIdx = Infinity;
+    let maxIdx = -1;
+
+    for (let i = 0; i < spans.length; i++) {
+      const el = spans[i];
+      if (range.intersectsNode(el)) {
+        const idx = Number(el.dataset.tokIdx);
+        if (Number.isFinite(idx)) {
+          if (idx < minIdx) minIdx = idx;
+          if (idx > maxIdx) maxIdx = idx;
+        }
+      }
+    }
+
+    if (maxIdx >= minIdx && minIdx !== Infinity) {
+      if (maxIdx > minIdx) {
+        store.selectTokenRange(minIdx, maxIdx);
+      } else {
+        store.selectTokenInstance(minIdx);
+      }
     }
   };
+
+  const span = store.selectedTokenSpan;
+  const isMultiSpan = Boolean(span && span.endTokenIdx > span.startTokenIdx);
 
   return (
     <div
@@ -87,7 +126,15 @@ export const HighlightedTextView: React.FC = () => {
                 theme: store.theme,
               });
 
-          const isSelected = store.selectedWordKey === tok.lookupKey;
+          const isInSpan = Boolean(
+            span && i >= span.startTokenIdx && i <= span.endTokenIdx,
+          );
+          const isSelected = isMultiSpan
+            ? isInSpan
+            : isInSpan || store.selectedWordKey === tok.lookupKey;
+          const isActiveInstance = Boolean(
+            span && !isMultiSpan && span.startTokenIdx === i,
+          );
           const isSearchHit = searchHitSet.has(i);
           const isSearchActive = activeSearchTokenIndex === i;
 
@@ -96,7 +143,7 @@ export const HighlightedTextView: React.FC = () => {
               ? `Level ${tok.statLevelNumber} (${tok.listName}) · Headword: ${tok.headword}`
               : tok.kind === 'ignored'
                 ? 'Ignored word'
-                : 'Out of lists (우클릭하여 Ignore 추가 가능)';
+                : 'Out of lists (클릭·우클릭하여 AI 분석 또는 Ignore 추가)';
 
           return (
             <React.Fragment key={tok.index}>
@@ -104,6 +151,7 @@ export const HighlightedTextView: React.FC = () => {
                 data-tok-idx={i}
                 className="tok-span"
                 data-selected={isSelected}
+                data-active-instance={isActiveInstance}
                 data-search-hit={isSearchHit}
                 data-search-active={isSearchActive}
                 title={tooltip}
@@ -112,14 +160,15 @@ export const HighlightedTextView: React.FC = () => {
                     ? { color: hl.color, fontWeight: 500 }
                     : undefined
                 }
-                onClick={() => store.selectWordForInspector(tok.token)}
+                onClick={() => store.selectTokenInstance(i)}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  store.selectWordForInspector(tok.token);
+                  store.selectTokenInstance(i);
                   setCtxMenu({
-                    x: Math.min(e.clientX, window.innerWidth - 268),
-                    y: Math.min(e.clientY, window.innerHeight - 176),
+                    x: Math.min(e.clientX, window.innerWidth - 296),
+                    y: Math.min(e.clientY, window.innerHeight - 280),
                     token: tok,
+                    tokenIdx: i,
                   });
                 }}
               >
@@ -146,6 +195,42 @@ export const HighlightedTextView: React.FC = () => {
                   ? 'Ignored'
                   : 'Out of lists'}
             </div>
+
+            <button
+              type="button"
+              className="menu-item"
+              onClick={() => {
+                const idx = ctxMenu.tokenIdx;
+                setCtxMenu(null);
+                store.selectTokenInstance(idx);
+                store.setInspectorTab('ai');
+                void store.openAiSuggestionModal();
+              }}
+            >
+              <span className="menu-item-left">
+                <Wand2 size={15} /> AI 추천 (단어 3 + 문장 3)
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className="menu-item"
+              onClick={() => {
+                const idx = ctxMenu.tokenIdx;
+                setCtxMenu(null);
+                store.selectTokenInstance(idx);
+                store.setInspectorTab('ai');
+                if (store.openRouterConfig.apiKey.trim()) {
+                  void store.runAiMorphologyCheck();
+                }
+              }}
+            >
+              <span className="menu-item-left">
+                <GitBranch size={15} /> AI: 기본형·어근 및 리스트 확인
+              </span>
+            </button>
+
+            <div className="menu-divider" />
 
             {ctxMenu.token.kind === 'out' && (
               <button
@@ -182,8 +267,6 @@ export const HighlightedTextView: React.FC = () => {
                 </button>
               )}
 
-            <div className="menu-divider" />
-
             <button
               type="button"
               className="menu-item"
@@ -202,4 +285,3 @@ export const HighlightedTextView: React.FC = () => {
     </div>
   );
 };
-

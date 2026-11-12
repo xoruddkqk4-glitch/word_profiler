@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -12,6 +12,8 @@ import {
   Plus,
   Redo2,
   Search,
+  Trash2,
+  Type,
   Undo2,
 } from 'lucide-react';
 import {
@@ -30,15 +32,33 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
 }) => {
   const store = useProfilerStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileMenuRef = useRef<HTMLDivElement>(null);
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
 
   const isInline = store.activeTargetFileId === null;
-  const canUndo = isInline && store.inlineHistoryIndex > 0;
-  const canRedo =
-    isInline && store.inlineHistoryIndex < store.inlineHistory.length - 1;
+  const canUndo = store.canUndoActiveDocument();
+  const canRedo = store.canRedoActiveDocument();
+  const activeFile = store.activeTargetFileId
+    ? store.targetFiles.find((f) => f.id === store.activeTargetFileId) ?? null
+    : null;
 
   const hitCount = store.searchMatchTokenIndices.length;
   const cursorDisplay =
     hitCount > 0 ? `${store.activeSearchCursor + 1}/${hitCount}` : '0/0';
+
+  useEffect(() => {
+    if (!fileMenuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (
+        fileMenuRef.current &&
+        !fileMenuRef.current.contains(e.target as Node)
+      ) {
+        setFileMenuOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    return () => window.removeEventListener('mousedown', onPointerDown);
+  }, [fileMenuOpen]);
 
   const handlePasteClipboard = async () => {
     try {
@@ -63,6 +83,100 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   return (
     <div className="editor-toolbar">
       <div className="toolbar-group">
+        <div className="file-switcher-wrap" ref={fileMenuRef}>
+          <button
+            type="button"
+            className="btn btn-sm file-switcher-btn"
+            title="열린 지문 파일 전환"
+            aria-expanded={fileMenuOpen}
+            aria-haspopup="menu"
+            onClick={() => setFileMenuOpen((v) => !v)}
+          >
+            {activeFile ? (
+              <>
+                <span className="file-ext-badge">{activeFile.sourceType}</span>
+                <span className="file-switcher-name">{activeFile.name}</span>
+              </>
+            ) : (
+              <>
+                <Type size={14} />
+                <span className="file-switcher-name">Inline Text</span>
+              </>
+            )}
+            <ChevronDown size={12} />
+            {store.targetFiles.length > 0 && (
+              <span className="count-badge tabular-nums">
+                {store.targetFiles.length}
+              </span>
+            )}
+          </button>
+          {fileMenuOpen && (
+            <div className="file-switcher-menu" role="menu">
+              <button
+                type="button"
+                className="menu-item"
+                role="menuitem"
+                data-active={isInline}
+                onClick={() => {
+                  setFileMenuOpen(false);
+                  void store.switchToInlineEditor();
+                }}
+              >
+                <span className="menu-item-left">
+                  <Type size={14} /> Inline Text
+                </span>
+              </button>
+              {store.targetFiles.map((file) => (
+                <div key={file.id} className="file-switcher-row">
+                  <button
+                    type="button"
+                    className="menu-item"
+                    role="menuitem"
+                    data-active={store.activeTargetFileId === file.id}
+                    onClick={() => {
+                      setFileMenuOpen(false);
+                      void store.openTargetFileInProfiler(file.id);
+                    }}
+                  >
+                    <span className="menu-item-left">
+                      <span className="file-ext-badge">{file.sourceType}</span>
+                      {file.name}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="mini-icon-btn"
+                    title={`${file.name} 닫기`}
+                    aria-label={`${file.name} 닫기`}
+                    onClick={() => {
+                      store.setSelectedTargetIds([file.id]);
+                      void store.removeSelectedTargetFiles();
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+              {store.targetFiles.length > 0 && (
+                <>
+                  <div className="menu-divider" />
+                  <button
+                    type="button"
+                    className="menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setFileMenuOpen(false);
+                      void store.clearAllTargetFiles();
+                    }}
+                  >
+                    <span className="menu-item-left">모든 파일 닫기</span>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
         <button
           type="button"
           className="btn btn-sm"

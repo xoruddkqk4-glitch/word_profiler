@@ -1,191 +1,154 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Edit3,
-  FilePlus2,
+  ChevronDown,
+  FileText,
   ListPlus,
-  Sparkles,
-  Trash2,
+  Package,
 } from 'lucide-react';
-import {
-  readTargetFilesFromBrowser,
-  readWordlistFilesFromBrowser,
-} from '../../io/fileReaders';
+import { readWordlistFilesFromBrowser } from '../../io/fileReaders';
 import { useProfilerStore } from '../../store/useProfilerStore';
+import type { WordlistManifestEntry } from '../../types/domain';
 import { CoverageRow } from './CoverageRow';
 
 export interface LeftSidebarProps {
   widthPx: number;
 }
 
+const CATEGORY_LABELS: Record<WordlistManifestEntry['category'], string> = {
+  builtin: 'GSL / AWL',
+  kr2015_family: '2015 교육과정 · 패밀리',
+  kr2015_school: '2015 교육과정 · 학교급',
+  kr2022_school: '2022 교육과정 · 학교급',
+};
+
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({ widthPx }) => {
   const store = useProfilerStore();
-  const targetInputRef = useRef<HTMLInputElement>(null);
   const refInputRef = useRef<HTMLInputElement>(null);
+  const coverageListRef = useRef<HTMLDivElement>(null);
+  const addMenuRef = useRef<HTMLDivElement>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [listDropActive, setListDropActive] = useState(false);
+  const listDragDepthRef = useRef(0);
 
   const profile = store.activeProfile;
   const showLevels = store.settings.showLevels;
   const theme = store.theme;
 
-  const handleTargetRowClick = (
-    e: React.MouseEvent,
-    id: string,
-    idx: number,
-  ) => {
-    if (e.metaKey || e.ctrlKey) {
-      const exists = store.selectedTargetIds.includes(id);
-      const next = exists
-        ? store.selectedTargetIds.filter((x) => x !== id)
-        : [...store.selectedTargetIds, id];
-      store.setSelectedTargetIds(next);
-      return;
+  const totalPct = profile?.totalCoveredPercentage ?? 0;
+
+  const alreadyAddedPaths = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of store.referenceLists) {
+      if (r.path) set.add(r.path.replace(/^\.?\/+/, ''));
+      if (r.name) set.add(r.name);
     }
-    if (e.shiftKey && store.selectedTargetIds.length > 0) {
-      const anchorId = store.selectedTargetIds[0];
-      const anchorIdx = store.targetFiles.findIndex((f) => f.id === anchorId);
-      if (anchorIdx !== -1) {
-        const [lo, hi] =
-          anchorIdx <= idx ? [anchorIdx, idx] : [idx, anchorIdx];
-        store.setSelectedTargetIds(
-          store.targetFiles.slice(lo, hi + 1).map((f) => f.id),
-        );
-        return;
+    return set;
+  }, [store.referenceLists]);
+
+  const bundledByCategory = useMemo(() => {
+    const lists = store.manifest?.lists ?? [];
+    const groups: {
+      category: WordlistManifestEntry['category'];
+      entries: WordlistManifestEntry[];
+    }[] = [];
+    for (const cat of [
+      'builtin',
+      'kr2022_school',
+      'kr2015_family',
+      'kr2015_school',
+    ] as WordlistManifestEntry['category'][]) {
+      const entries = lists.filter((l) => l.category === cat);
+      if (entries.length > 0) groups.push({ category: cat, entries });
+    }
+    return groups;
+  }, [store.manifest]);
+
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (
+        addMenuRef.current &&
+        !addMenuRef.current.contains(e.target as Node)
+      ) {
+        setAddMenuOpen(false);
       }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAddMenuOpen(false);
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [addMenuOpen]);
+
+  useEffect(() => {
+    const flashId = store.lastAddedReferenceListId;
+    if (!flashId || !coverageListRef.current) return;
+    const el = coverageListRef.current.querySelector(
+      `[data-ref-id="${flashId}"]`,
+    );
+    if (el instanceof HTMLElement) {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
-    store.setSelectedTargetIds([id]);
+  }, [store.lastAddedReferenceListId, store.referenceLists.length]);
+
+  const handleWordlistFiles = async (files: FileList | File[]) => {
+    const { lists, errors } = await readWordlistFilesFromBrowser(files);
+    if (errors.length > 0) {
+      store.setErrorBanner(`${errors[0].fileName}: ${errors[0].reason}`);
+    }
+    if (lists.length > 0) {
+      await store.addCustomReferenceLists(lists);
+    }
   };
 
-  const totalPct = profile?.totalCoveredPercentage ?? 0;
+  const isBundledAlreadyAdded = (entry: WordlistManifestEntry) => {
+    const cleanUrl = entry.url.replace(/^\.?\/+/, '');
+    return (
+      alreadyAddedPaths.has(cleanUrl) ||
+      alreadyAddedPaths.has(entry.name) ||
+      store.referenceLists.some(
+        (r) => r.isBuiltin && (r.path === entry.url || r.name === entry.name),
+      )
+    );
+  };
 
   return (
     <aside className="left-sidebar" style={{ width: `${widthPx}px` }}>
-      {/* Section 1: Target Files */}
-      <section className="sidebar-section sidebar-section-files">
-        <div className="section-header">
-          <div className="section-title-wrap">
-            <h2 className="section-title">Target Files</h2>
-            <span
-              className="count-badge tabular-nums"
-              title={`로드된 타겟 파일 ${store.targetFiles.length}개`}
-            >
-              {store.targetFiles.length}
-            </span>
-          </div>
-
-          <div className="section-actions">
-            <button
-              type="button"
-              className="btn btn-sm"
-              title="인라인 텍스트 직접 입력/편집"
-              onClick={() => void store.switchToInlineEditor()}
-            >
-              <Edit3 size={14} /> Inline
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm"
-              title="타겟 파일 추가 (.txt, .docx, .pdf)"
-              onClick={() => targetInputRef.current?.click()}
-            >
-              <FilePlus2 size={14} /> Add
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm"
-              disabled={store.targetFiles.length === 0}
-              title={
-                store.selectedTargetIds.length > 0
-                  ? '선택한 타겟 파일 닫기'
-                  : '모든 타겟 파일 닫기'
-              }
-              onClick={() => {
-                if (store.selectedTargetIds.length > 0) {
-                  void store.removeSelectedTargetFiles();
-                } else {
-                  void store.clearAllTargetFiles();
-                }
-              }}
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-
-        <input
-          ref={targetInputRef}
-          type="file"
-          accept=".txt,.docx,.pdf"
-          multiple
-          hidden
-          onChange={async (e) => {
-            const files = e.target.files;
-            e.target.value = '';
-            if (!files?.length) return;
-            const { items, errors } = await readTargetFilesFromBrowser(files);
-            if (errors.length > 0) {
-              store.setErrorBanner(`${errors[0].fileName}: ${errors[0].reason}`);
-            }
-            if (items.length > 0) {
-              await store.addTargetFiles(items);
-            }
-          }}
-        />
-
-        <div className="target-files-list" role="listbox" aria-label="Target Files">
-          {store.targetFiles.length === 0 ? (
-            <div className="empty-hint-box">
-              <span>.txt · .docx · .pdf 파일을 드래그하거나 추가하세요.</span>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={() => void store.loadSamplePassage()}
-              >
-                <Sparkles size={14} /> 샘플 영문 지문 불러오기
-              </button>
-            </div>
-          ) : (
-            store.targetFiles.map((file, idx) => {
-              const isSelected = store.selectedTargetIds.includes(file.id);
-              const isActive = store.activeTargetFileId === file.id;
-              return (
-                <div
-                  key={file.id}
-                  role="option"
-                  aria-selected={isSelected}
-                  className="target-file-row"
-                  data-selected={isSelected}
-                  data-active={isActive}
-                  title={`${file.path} (더블클릭하여 프로파일 보기)`}
-                  onClick={(e) => handleTargetRowClick(e, file.id, idx)}
-                  onDoubleClick={() =>
-                    void store.openTargetFileInProfiler(file.id)
-                  }
-                >
-                  <span className="target-file-name">
-                    <span className="file-ext-badge">{file.sourceType}</span>
-                    <span>{file.name}</span>
-                  </span>
-                  <button
-                    type="button"
-                    className="mini-icon-btn"
-                    title="파일 제거"
-                    aria-label={`${file.name} 제거`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      store.setSelectedTargetIds([file.id]);
-                      void store.removeSelectedTargetFiles();
-                    }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </section>
-
-      {/* Section 2: Reference Lists & Coverage Viewers */}
-      <section className="sidebar-section sidebar-section-lists">
+      <section
+        className="sidebar-section sidebar-section-lists"
+        data-drop-active={listDropActive}
+        onDragEnter={(e) => {
+          if (!e.dataTransfer.types.includes('Files')) return;
+          e.preventDefault();
+          e.stopPropagation();
+          listDragDepthRef.current += 1;
+          setListDropActive(true);
+        }}
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes('Files')) return;
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDragLeave={(e) => {
+          if (!e.dataTransfer.types.includes('Files')) return;
+          e.preventDefault();
+          e.stopPropagation();
+          listDragDepthRef.current = Math.max(0, listDragDepthRef.current - 1);
+          if (listDragDepthRef.current === 0) setListDropActive(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          listDragDepthRef.current = 0;
+          setListDropActive(false);
+          const files = e.dataTransfer.files;
+          if (files?.length) void handleWordlistFiles(files);
+        }}
+      >
         <div className="section-header">
           <div className="section-title-wrap">
             <h2 className="section-title">Reference Lists</h2>
@@ -198,14 +161,71 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ widthPx }) => {
           </div>
 
           <div className="section-actions">
-            <button
-              type="button"
-              className="btn btn-sm"
-              title="사용자 레퍼런스 리스트 파일(.txt) 추가"
-              onClick={() => refInputRef.current?.click()}
-            >
-              <ListPlus size={14} /> Add
-            </button>
+            <div className="add-list-menu-wrap" ref={addMenuRef}>
+              <button
+                type="button"
+                className="btn btn-sm"
+                title="사용자 파일 또는 내장 단어장 추가"
+                aria-expanded={addMenuOpen}
+                aria-haspopup="menu"
+                onClick={() => setAddMenuOpen((v) => !v)}
+              >
+                <ListPlus size={14} /> Add <ChevronDown size={12} />
+              </button>
+              {addMenuOpen && (
+                <div className="add-list-menu" role="menu">
+                  <button
+                    type="button"
+                    className="menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setAddMenuOpen(false);
+                      refInputRef.current?.click();
+                    }}
+                  >
+                    <span className="menu-item-left">
+                      <FileText size={14} /> 파일에서 추가… (.txt / .tsv / .lst)
+                    </span>
+                  </button>
+                  {bundledByCategory.map((group) => (
+                    <React.Fragment key={group.category}>
+                      <div className="menu-divider" />
+                      <div className="menu-section-caption">
+                        {CATEGORY_LABELS[group.category]}
+                      </div>
+                      {group.entries.map((entry) => {
+                        const added = isBundledAlreadyAdded(entry);
+                        return (
+                          <button
+                            key={entry.id}
+                            type="button"
+                            className="menu-item"
+                            role="menuitem"
+                            disabled={added}
+                            title={
+                              added
+                                ? '이미 추가된 단어장입니다'
+                                : entry.description
+                            }
+                            onClick={() => {
+                              setAddMenuOpen(false);
+                              void store.addBundledReferenceList(entry.id);
+                            }}
+                          >
+                            <span className="menu-item-left">
+                              <Package size={13} /> {entry.displayName}
+                            </span>
+                            {added && (
+                              <span className="menu-shortcut">추가됨</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               type="button"
               className="btn btn-sm"
@@ -228,17 +248,16 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ widthPx }) => {
             const files = e.target.files;
             e.target.value = '';
             if (!files?.length) return;
-            const { lists, errors } = await readWordlistFilesFromBrowser(files);
-            if (errors.length > 0) {
-              store.setErrorBanner(`${errors[0].fileName}: ${errors[0].reason}`);
-            }
-            if (lists.length > 0) {
-              await store.addCustomReferenceLists(lists);
-            }
+            await handleWordlistFiles(files);
           }}
         />
 
-        {/* Highlight Mode Toggle (List Words vs Non-List Words) */}
+        {listDropActive && (
+          <div className="list-drop-hint" aria-hidden="true">
+            단어장 파일(.txt)을 여기에 놓으면 Reference List로 추가됩니다
+          </div>
+        )}
+
         <div className="highlight-mode-row">
           <div
             className="segmented-toggle"
@@ -268,7 +287,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ widthPx }) => {
           </div>
         </div>
 
-        {/* Master Family Expansion Indicator */}
         <div className="master-badge-bar">
           <span>
             Master Family:{' '}
@@ -286,9 +304,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ widthPx }) => {
           </button>
         </div>
 
-        {/* Coverage Bars Container */}
-        <div className="coverage-scroll-list">
-          {/* Total Coverage Row */}
+        <div className="coverage-scroll-list" ref={coverageListRef}>
           <div className="coverage-row coverage-row-total">
             <div className="coverage-row-top">
               <div className="coverage-row-left">
@@ -312,36 +328,53 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ widthPx }) => {
             </div>
           </div>
 
-          {/* Active & Loaded Reference List Rows */}
-          {store.referenceLists.map((ref, idx) => {
-            const swatch = theme === 'dark' ? ref.colorDark : ref.colorLight;
-            const pct = profile?.levelSummaries[ref.id]?.percentage ?? 0;
-            return (
-              <CoverageRow
-                key={ref.id}
-                label={ref.name}
-                tooltip={ref.displayName || ref.name}
-                checked={ref.enabled}
-                onToggleCheck={() => void store.toggleReferenceList(ref.id)}
-                swatchColor={swatch}
-                swatchActive={showLevels && ref.enabled}
-                allowColorChange={showLevels && ref.enabled}
-                onChangeColor={(hex) => store.setReferenceListColor(ref.id, hex)}
-                percentage={pct}
-                barColor={ref.enabled ? swatch : 'var(--border-strong)'}
-                onOpenInfo={() => store.openCoverageModalForKey(ref.id)}
-                canMoveUp={idx > 0}
-                canMoveDown={idx < store.referenceLists.length - 1}
-                onMoveUp={() => void store.moveReferenceList(ref.id, 'up')}
-                onMoveDown={() => void store.moveReferenceList(ref.id, 'down')}
-                onRemove={() => void store.removeReferenceList(ref.id)}
-              />
-            );
-          })}
+          {store.referenceLists.length === 0 ? (
+            <div className="empty-hint-box coverage-empty-hint">
+              <span>
+                Add 메뉴에서 내장 단어장(GSL / 2022 교육과정 등)을 고르거나,
+                .txt 단어장 파일을 이 영역에 끌어다 놓으세요.
+              </span>
+            </div>
+          ) : (
+            store.referenceLists.map((ref, idx) => {
+              const swatch = theme === 'dark' ? ref.colorDark : ref.colorLight;
+              const pct = profile?.levelSummaries[ref.id]?.percentage ?? 0;
+              const isFlash = store.lastAddedReferenceListId === ref.id;
+              return (
+                <div
+                  key={ref.id}
+                  data-ref-id={ref.id}
+                  className={isFlash ? 'coverage-row-flash' : undefined}
+                >
+                  <CoverageRow
+                    label={ref.name}
+                    tooltip={ref.displayName || ref.name}
+                    checked={ref.enabled}
+                    onToggleCheck={() => void store.toggleReferenceList(ref.id)}
+                    swatchColor={swatch}
+                    swatchActive={showLevels && ref.enabled}
+                    allowColorChange={showLevels && ref.enabled}
+                    onChangeColor={(hex) =>
+                      store.setReferenceListColor(ref.id, hex)
+                    }
+                    percentage={pct}
+                    barColor={ref.enabled ? swatch : 'var(--border-strong)'}
+                    onOpenInfo={() => store.openCoverageModalForKey(ref.id)}
+                    canMoveUp={idx > 0}
+                    canMoveDown={idx < store.referenceLists.length - 1}
+                    onMoveUp={() => void store.moveReferenceList(ref.id, 'up')}
+                    onMoveDown={() =>
+                      void store.moveReferenceList(ref.id, 'down')
+                    }
+                    onRemove={() => void store.removeReferenceList(ref.id)}
+                  />
+                </div>
+              );
+            })
+          )}
 
           <div className="coverage-divider" />
 
-          {/* Ignored Row */}
           {(() => {
             const igSwatch =
               theme === 'dark'
@@ -367,7 +400,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ widthPx }) => {
             );
           })()}
 
-          {/* Not in Lists Row */}
           {(() => {
             const outSwatch =
               theme === 'dark' ? store.outColor.dark : store.outColor.light;
@@ -393,4 +425,3 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ widthPx }) => {
     </aside>
   );
 };
-

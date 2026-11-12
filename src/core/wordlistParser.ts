@@ -85,6 +85,26 @@ function normalizeTerm(
   return term ? { term, pos } : null;
 }
 
+function detectNationTreeFormat(lines: string[]): boolean {
+  let nonEmpty = 0;
+  let indentedAfterHead = 0;
+  let sawHeadword = false;
+
+  for (const rawLine of lines) {
+    if (!rawLine.trim()) continue;
+    nonEmpty += 1;
+    const isIndented = /^(?:\t+|\s{2,}|->\s*)\S/.test(rawLine);
+    if (isIndented) {
+      if (sawHeadword) indentedAfterHead += 1;
+    } else {
+      sawHeadword = true;
+    }
+  }
+
+  if (nonEmpty === 0 || indentedAfterHead === 0) return false;
+  return indentedAfterHead / nonEmpty >= 0.1;
+}
+
 /**
  * Parses a raw wordlist string supporting:
  * 1. Row format: `HEADWORD\tMEMBER1\tMEMBER2...` or single word per line
@@ -101,10 +121,12 @@ export function parseRawFamilyGroups(
   const lines = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   const { ignoreCase, formatMode, stripAnnotations } = options;
 
+  // Auto-detect Nation tree format only when indented member lines appear
+  // after a non-indented headword line (ratio ≥ 10% of non-empty lines).
+  // A single stray indented line must not force the whole file into tree mode.
   const isTreeMode =
     formatMode === 'trees' ||
-    (formatMode === 'auto' &&
-      lines.some((line) => /^(?:\t+|\s{2,}|->\s*)\S/.test(line)));
+    (formatMode === 'auto' && detectNationTreeFormat(lines));
 
   const familyOrder: string[] = [];
   const familyMap = new Map<string, Map<string, string>>(); // headword -> Map<term, pos>
@@ -226,7 +248,11 @@ export function computeLexiconCacheKey(params: {
   ignoreEnabled: boolean;
   settings: Pick<
     ProfilerSettings,
-    'ignoreCase' | 'nationFormat' | 'stripCurriculumAnnotations' | 'showFullPathsInStats'
+    | 'ignoreCase'
+    | 'nationFormat'
+    | 'stripCurriculumAnnotations'
+    | 'showFullPathsInStats'
+    | 'tokenDefinition'
   >;
 }): string {
   let h = 2166136261;
@@ -239,7 +265,20 @@ export function computeLexiconCacheKey(params: {
   feed(params.settings.nationFormat);
   feed(String(params.settings.stripCurriculumAnnotations));
   feed(String(params.settings.showFullPathsInStats));
+  feed(params.settings.tokenDefinition ?? '');
   feed(String(params.ignoreEnabled));
+
+  const feedContentFingerprint = (content: string) => {
+    feed(String(content.length));
+    feed(String(fnv1aHash(content)));
+    // Head/mid/tail samples reduce 32-bit FNV collision risk without hashing twice.
+    if (content.length > 0) {
+      feed(content.slice(0, 96));
+      const mid = Math.max(0, Math.floor(content.length / 2) - 48);
+      feed(content.slice(mid, mid + 96));
+      feed(content.slice(-96));
+    }
+  };
 
   for (const r of params.referenceLists) {
     feed(r.id);
@@ -247,15 +286,13 @@ export function computeLexiconCacheKey(params: {
     feed(r.path);
     feed(String(r.enabled));
     if (r.enabled) {
-      feed(String(r.content.length));
-      feed(String(fnv1aHash(r.content)));
+      feedContentFingerprint(r.content);
     }
   }
 
   feed(String(params.ignoreList.enabled));
   if (params.ignoreList.enabled && params.ignoreEnabled) {
-    feed(String(params.ignoreList.content.length));
-    feed(String(fnv1aHash(params.ignoreList.content)));
+    feedContentFingerprint(params.ignoreList.content);
   }
 
   for (const w of params.extraIgnoreWords) {
@@ -264,8 +301,7 @@ export function computeLexiconCacheKey(params: {
 
   feed(String(params.masterList.enabled));
   if (params.masterList.enabled) {
-    feed(String(params.masterList.content.length));
-    feed(String(fnv1aHash(params.masterList.content)));
+    feedContentFingerprint(params.masterList.content);
   }
 
   return h.toString(16);

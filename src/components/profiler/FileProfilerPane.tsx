@@ -83,7 +83,7 @@ export const FileProfilerPane: React.FC<FileProfilerPaneProps> = ({
                   분석할 영어 지문 파일(<code>.txt</code>, <code>.docx</code>,{' '}
                   <code>.pdf</code>)을 화면에 끌어다 놓거나, 직접 지문을 붙여넣어{' '}
                   <strong>GSL/AWL</strong> 또는{' '}
-                  <strong>2015 개정 영어과 교육과정</strong> 기준 어휘 커버리지를
+                  <strong>2015·2022 개정 영어과 교육과정</strong> 기준 어휘 커버리지를
                   즉시 확인하세요.
                 </p>
                 <div className="stage-empty-actions">
