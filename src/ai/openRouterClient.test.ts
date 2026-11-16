@@ -231,6 +231,31 @@ describe('callOpenRouterJson', () => {
     expect(thirdBody.reasoning).toBeUndefined();
     expect(thirdBody.provider).toBeUndefined();
   });
+
+  it('uses https://antwordprofiler.local HTTP-Referer when running under app:// desktop origin', async () => {
+    vi.stubGlobal('window', {
+      location: { origin: 'app://antwordprofiler' },
+    });
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [{ finish_reason: 'stop', message: { content: '{"ok":true}' } }],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await callOpenRouterJson<{ ok: boolean }>({
+      config: testConfig,
+      messages: [{ role: 'user', content: 'test' }],
+    });
+
+    expect(res).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const headers = fetchMock.mock.calls[0][1]?.headers as Record<string, string>;
+    expect(headers['HTTP-Referer']).toBe('https://antwordprofiler.local');
+  });
 });
 
 describe('Google Gemini direct API integration', () => {

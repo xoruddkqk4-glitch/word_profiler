@@ -340,7 +340,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
       </div>
 
       {/* Right Search Box */}
-      <div className="toolbar-group">
+      <div className="toolbar-group editor-search-group">
         <div className="search-box-wrap">
           <Search size={15} />
           <input

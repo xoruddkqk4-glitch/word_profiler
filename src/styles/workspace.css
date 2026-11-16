@@ -1438,18 +1438,26 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-wrap: nowrap;
+  gap: 8px;
   padding: 8px 14px;
   background: var(--card);
   border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
 }
 
 .toolbar-group {
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
+  flex-shrink: 0;
+}
+
+.editor-search-group {
+  flex: 0 1 280px;
+  min-width: 190px;
+  justify-content: flex-end;
 }
 
 .toolbar-sep {
@@ -1471,11 +1479,18 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  max-width: 280px;
+  min-width: 190px;
   height: 34px;
   padding: 0 6px 0 10px;
   border: 1px solid var(--input);
   border-radius: var(--radius-ctl-md);
   background: var(--background);
+}
+
+.search-box-wrap > svg {
+  flex-shrink: 0;
 }
 
 .search-box-wrap:focus-within {
@@ -1487,7 +1502,9 @@ a {
   background: transparent;
   color: var(--foreground);
   font-size: var(--text-sm);
-  width: 196px;
+  flex: 1 1 auto;
+  min-width: 96px;
+  width: 100%;
   outline: none;
 }
 
@@ -1797,33 +1814,37 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 10px 14px;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 8px 14px;
   background: var(--card);
   border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
 }
 
 .stats-subtabs-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 5px;
+  flex-shrink: 0;
 }
 
 .subtab-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 13px;
+  gap: 5px;
+  height: var(--control-h-sm);
+  padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-ctl-sm);
   background: var(--background);
   color: var(--text-secondary);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: 500;
   white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
 }
@@ -1843,8 +1864,13 @@ a {
 .stats-actions-group {
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.stats-actions-group .btn-sm {
+  padding: 0 9px;
 }
 
 .stats-filter-bar {

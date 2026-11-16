@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.antwordprofiler.desktop",
+  "productName": "AntWordProfiler",
+  "buildVersion": "2.2.1",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*"
+  ],
+  "asar": true,
+  "win": {
+    "target": [
+      "portable"
+    ],
+    "signAndEditExecutable": false
+  },
+  "portable": {
+    "artifactName": "AntWordProfiler-Portable.${ext}"
+  }
+}

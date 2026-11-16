@@ -3,14 +3,19 @@
   "private": true,
   "version": "2.2.1-web.1",
   "description": "Local-first web implementation of AntWordProfiler 2.2.1 with Korean 2015 Revised National English Curriculum presets",
+  "author": "AntWordProfiler",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:start": "npm run build && electron .",
+    "exe:dir": "npm run build && electron-builder --win dir",
+    "exe:build": "npm run build && electron-builder --win portable"
   },
   "dependencies": {
     "docx": "^9.1.1",
@@ -29,6 +34,8 @@
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^45.3.3",
+    "electron-builder": "^26.18.0",
     "tailwindcss": "^4.3.5",
     "typescript": "~5.7.3",
     "vite": "^6.1.0",

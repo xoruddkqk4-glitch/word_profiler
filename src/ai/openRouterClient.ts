@@ -490,7 +490,9 @@ async function sendChatCompletionRequest(params: {
   } = params;
 
   const referer =
-    typeof window !== 'undefined' && window.location?.origin
+    typeof window !== 'undefined' &&
+    typeof window.location?.origin === 'string' &&
+    /^https?:\/\//i.test(window.location.origin)
       ? window.location.origin
       : 'https://antwordprofiler.local';
 
