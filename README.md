@@ -39,7 +39,7 @@
 
 ### 5. Google Gemini (무료 지원) · OpenRouter 기반 AI 어휘 도우미 (`src/ai/`)
 - **이중 API 제공자 및 브라우저 직접 호출**: 백엔드 서버·DB 없이 무료 티어를 제공하는 **Google Gemini API (`Google AI Studio`)** 또는 **OpenRouter API**를 선택해 브라우저에서 직접 호출하며, 두 API 키를 독립적으로 보관·삭제할 수 있습니다. 모든 추천 후보와 패러프레이즈 토큰은 로컬 `lexiconVerifier`로 활성 단어장 등재 여부를 결정론적으로 대조 검증합니다.
-- **통합 AI 어휘 추천 모달 (`AiSuggestionModal`) & 실시간 로딩 피드백**: 선택한 단어/표현의 문맥을 즉시(`0.0초`) 상단에 표시하고 회전 스피너·초록 맥박 표시·`0.1초` 실시간 경과 타이머·왕복 진행 바·2단 쉬머 스켈레톤 카드로 작동 상태를 직관적으로 보여 주며, 대형 창(`min(1620px, 94vw)`), 헤더 포인터 드래그 이동, CSS Grid `subgrid` 좌·우 오와 열 정렬을 제공합니다.
+- **통합 4종 AI 어휘 추천 모달 (`AiSuggestionModal` · 단어 3+3 & 문장 3+3) & 형광 강조**: 단일 API 호출로 **Word List 내 추천 단어 3개 · 리스트 외 허용 대체 단어 3개 · Word List 내 패러프레이즈 3개 · 리스트 외 포함 패러프레이즈 3개**를 동시에 생성해 상단 트랙 필터(`전체 보기` / `Word List 내` / `Word List 외 확장`)와 CSS Grid `subgrid` 좌·우 오와 열 정렬로 표시하며, 원문 문장의 선택 어휘와 카드 미리보기의 치환 어휘에 **노란색 형광펜 배경(`.ai-highlight-mark`)**을 칠해 직관적으로 식별할 수 있습니다. 로딩 중에는 회전 스피너·초록 맥박·`0.1초` 타이머·왕복 진행 바·쉬머 스켈레톤을 제공하고, 대형 창(`min(1620px, 94vw)`) 헤더 포인터 드래그 이동을 지원합니다.
 - **혼잡 자동 우회 & 고속 추론**: Gemini `GET /v1beta/models/<id>` 즉시 연결 확인, `HTTP 503` 요청 폭주 및 `7.5초` 응답 지연 시 경량 백업 무료 모델(`gemini-3.5-flash-lite` 등) 즉시 자동 페일오버(60초 쿨다운 기억), Gemini 세대별 추론 최적화(Gemini 3/4 `thinkingLevel: "LOW"`, Gemini 2.5 `thinkingBudget: 0`), OpenRouter `provider.sort: "throughput"` + `reasoning: { effort: "low", exclude: true }`, 다단계 JSON 복구 파서(`extractJsonObjectFromText`) 및 32건 세션 캐시를 지원합니다.
 - **어근·기본형 형태소 대조 (`analyzeMorphologyAndRoots`)**: 선택 단어의 문맥 품사 및 기본형·파생 기반어·어근의 활성 단어장 등재 여부를 즉시 대조합니다.
 
@@ -155,3 +155,19 @@ npm run exe:build
   - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
   - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 7개 테스트 파일 / 40개 테스트 전원 통과 — `app://` 데스크톱 오리진 `HTTP-Referer` 검증 테스트 포함).
   - 프로덕션 웹 빌드 및 Windows `.exe` 패키징 통과: `npm run exe:build` (`tsc -b && vite build && electron-builder --win portable`, Exit Code 0 — `release/AntWordProfiler-Portable.exe` 및 `release/win-unpacked/AntWordProfiler.exe` 정상 생성 확인).
+
+## [2026-11-16 20:50] 업데이트 이력 (Commit ID: `2c7194a`)
+- **수정 내용**:
+  - **AI 어휘 추천 4종 듀얼 트랙 확장 (`단어 3+3 · 문장 3+3`) 구현**:
+    - `CombinedSuggestionResult`(`src/types/ai.ts`) 및 `suggestReplacementsAndParaphrases`(`src/ai/lexicalAssistantService.ts`)를 확장해 단일 JSON API 왕복(`maxTokens: 3200`)으로 **그룹 A(`inListSynonymCandidates`, Word List 내 단어 3개)**, **그룹 B(`freeSynonymCandidates`, Word List 외 허용 대체 단어 3개)**, **그룹 C(`inListParaphraseCandidates`, Word List 내 패러프레이즈 3개)**, **그룹 D(`freeParaphraseCandidates`, Word List 외 포함 패러프레이즈 3개)**를 동시에 생성하도록 고도화(`aiSuggestionCache` `v2` 키 분리).
+    - LLM의 자체 분류를 그대로 신뢰하지 않고 모든 후보를 로컬 `lexiconVerifier`로 검증하여, `inListSynonyms`에 섞여 들어온 미등재 어휘는 그룹 A에서 제외하고 그룹 B(`리스트 외 (Out)` 배지)로 자동 재분류하며 그룹 간 중복 제거 및 치환 합성 폴백을 수행.
+    - `AiSuggestionModal.tsx`에 상단 보기 필터(`전체 보기` / `Word List 내` / `Word List 외 확장`)와 2트랙 섹션 배너(`.ai-track-section`)를 추가하고 기존 좌·우 2열 CSS `subgrid` 오와 열 정렬을 그대로 유지.
+  - **선택 어휘 및 치환 미리보기 노란색 형광펜 강조 (`.ai-highlight-mark`) 적용**:
+    - `lexiconVerifier.ts`에 토큰 인덱스 기반 문장 분할 헬퍼 `splitSentenceAroundSpan`을 추가해 동일 단어가 한 문장에 여러 번 등장해도 정확히 선택한 위치만 분리하도록 구현.
+    - 모달 상단 원문 문장(`.ai-modal-sentence`)의 선택 어휘와 추천 단어 카드 미리보기(`.ai-preview-box`)의 치환 어휘(기존 `[word]` 대괄호 표기 대체)에 라이트·다크 공용 고대비 노란색 형광 배경(`--ai-fluo-yellow-bg`)을 적용.
+  - **Windows 독립 실행형 `.exe` 동기화 리빌드**:
+    - 위 변경 사항 전체를 프로덕션 번들(`dist/`) 및 Windows 실행 파일(`release/AntWordProfiler-Portable.exe`, `release/win-unpacked/AntWordProfiler.exe`)에 반영하여 재패키징 완료.
+- **검증 결과**:
+  - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
+  - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 7개 테스트 파일 / 45개 테스트 전원 통과 — 4종 추천 재분류·중복 제거·폴백 합성 3건 및 `splitSentenceAroundSpan` 정확 위치 분리 2건 신규 추가).
+  - Windows `.exe` 재빌드 검증 통과: `npm run exe:build` (`tsc -b && vite build && electron-builder --win portable`, Exit Code 0 — `release/AntWordProfiler-Portable.exe` 및 `release/win-unpacked/AntWordProfiler.exe` 최신화 확인).
