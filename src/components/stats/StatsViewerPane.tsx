@@ -167,13 +167,15 @@ export const StatsViewerPane: React.FC = () => {
 
   const handleCopyTable = async () => {
     if (!bundle) return;
-    await copySheetToClipboard({
+    const ok = await copySheetToClipboard({
       sheetName: subTab,
       headers: columns.map((c) => c.label),
       rows: totalRow ? [...bodyRows, totalRow] : bodyRows,
     });
-    setCopiedFeedback(true);
-    setTimeout(() => setCopiedFeedback(false), 1500);
+    if (ok) {
+      setCopiedFeedback(true);
+      setTimeout(() => setCopiedFeedback(false), 1500);
+    }
   };
 
   const showLevelInput =
@@ -233,6 +235,7 @@ export const StatsViewerPane: React.FC = () => {
                 bundle,
                 subTab,
                 store.settings.showFullPathsInStats,
+                { hideCumulativeInCoverage: hideCumulative },
               );
             }}
           >
@@ -321,9 +324,17 @@ export const StatsViewerPane: React.FC = () => {
             Full Paths
           </label>
           {bundle && (
-            <span className="tabular-nums">
-              Rows: {bodyRows.length.toLocaleString()}
-            </span>
+            <>
+              <span className="tabular-nums">
+                {bundle.fileHeaders.length === 1 &&
+                bundle.fileHeaders[0].id === '__inline__'
+                  ? 'Source: Inline Text'
+                  : `Files: ${bundle.fileHeaders.length}`}
+              </span>
+              <span className="tabular-nums">
+                Rows: {bodyRows.length.toLocaleString()}
+              </span>
+            </>
           )}
         </div>
       </div>

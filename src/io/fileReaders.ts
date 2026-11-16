@@ -28,31 +28,47 @@ export function decodeTextBufferSmart(buffer: ArrayBuffer): string {
 
 async function extractPdfText(buffer: ArrayBuffer): Promise<string> {
   const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
-  const pdf = await loadingTask.promise;
-  const pageTexts: string[] = [];
+  let pdf: Awaited<typeof loadingTask.promise> | null = null;
+  try {
+    pdf = await loadingTask.promise;
+    const pageTexts: string[] = [];
 
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const content = await page.getTextContent();
-    const strings: string[] = [];
-    let lastY: number | null = null;
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const content = await page.getTextContent();
+      const strings: string[] = [];
+      let lastY: number | null = null;
 
-    for (const item of content.items) {
-      if ('str' in item) {
-        const y = Array.isArray(item.transform) ? Number(item.transform[5]) : null;
-        if (lastY !== null && y !== null && Math.abs(y - lastY) > 4) {
-          strings.push('\n');
-        } else if (strings.length > 0 && !strings[strings.length - 1].endsWith('\n')) {
-          strings.push(' ');
+      for (const item of content.items) {
+        if ('str' in item) {
+          const y = Array.isArray(item.transform) ? Number(item.transform[5]) : null;
+          if (lastY !== null && y !== null && Math.abs(y - lastY) > 4) {
+            strings.push('\n');
+          } else if (strings.length > 0 && !strings[strings.length - 1].endsWith('\n')) {
+            strings.push(' ');
+          }
+          strings.push(item.str);
+          if (y !== null) lastY = y;
         }
-        strings.push(item.str);
-        if (y !== null) lastY = y;
       }
+      pageTexts.push(strings.join('').replace(/[ \t]+\n/g, '\n').trim());
     }
-    pageTexts.push(strings.join('').replace(/[ \t]+\n/g, '\n').trim());
-  }
 
-  return pageTexts.filter(Boolean).join('\n\n');
+    return pageTexts.filter(Boolean).join('\n\n');
+  } finally {
+    if (pdf) {
+      await pdf.destroy().catch(() => {});
+    }
+    await loadingTask.destroy().catch(() => {});
+  }
+}
+
+export function formatFileReadErrors(
+  errors: readonly { fileName: string; reason: string }[],
+): string | null {
+  if (errors.length === 0) return null;
+  const first = `${errors[0].fileName}: ${errors[0].reason}`;
+  return errors.length === 1 ? first : `${first} (외 ${errors.length - 1}건 오류)`;
 }
 
 export interface ReadFilesReport {
@@ -139,7 +155,7 @@ export async function readWordlistFilesFromBrowser(
   for (const file of files) {
     const lower = file.name.toLowerCase();
     if (!lower.endsWith('.txt') && !lower.endsWith('.tsv') && !lower.endsWith('.lst')) {
-      if (file.name.startsWith('.') || lower === 'desktop.ini') continue;
+      if (file.name.startsWith('.') || lower === 'desktop.ini' || lower === 'thumbs.db') continue;
       errors.push({
         fileName: file.name,
         reason: '단어장은 .txt (탭 구분 또는 줄바꿈 구분) 형식이어야 합니다.',

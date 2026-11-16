@@ -4,7 +4,7 @@ import type {
   ProfilerSettings,
   ReferenceListSource,
 } from '../types/domain';
-import { compileLexicon } from './wordlistParser.ts';
+import { compileLexicon, type CompiledLexicon } from './wordlistParser.ts';
 
 /**
  * Validates active reference lists for duplicate word entries across lists,
@@ -15,15 +15,18 @@ export function validateReferenceLists(params: {
   referenceLists: ReferenceListSource[];
   masterList: AuxiliaryListState;
   settings: ProfilerSettings;
+  compiledLexicon?: CompiledLexicon;
 }): DuplicateEntryRecord[] {
-  const lexicon = compileLexicon({
-    referenceLists: params.referenceLists,
-    ignoreList: { enabled: false, name: '', path: '', content: '' },
-    extraIgnoreWords: [],
-    masterList: params.masterList,
-    ignoreEnabled: false,
-    settings: params.settings,
-  });
+  const lexicon =
+    params.compiledLexicon ??
+    compileLexicon({
+      referenceLists: params.referenceLists,
+      ignoreList: { enabled: false, name: '', path: '', content: '' },
+      extraIgnoreWords: [],
+      masterList: params.masterList,
+      ignoreEnabled: false,
+      settings: params.settings,
+    });
 
   const occurrences = new Map<
     string,

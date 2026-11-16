@@ -102,8 +102,8 @@ export function computeCorpusStatistics(params: {
   }
 
   const typeMap = new Map<string, TypeAcc>();
-  // Key headwords by `${level}:${headword}` so out-of-list vs level collisions stay clean,
-  // though within AntWordProfiler headword is grouped by headword string
+  // Key headwords by `${level}\0${headword}` so cross-level headwords stay deterministic
+  // and match Coverage Stats `TOTAL.headwords`.
   const headwordMap = new Map<string, HeadwordAcc>();
 
   for (let docIdx = 0; docIdx < fileCount; docIdx++) {
@@ -182,7 +182,8 @@ export function computeCorpusStatistics(params: {
       tAcc.fileSet.add(docIdx);
 
       // Headword stats update
-      let hwAcc = headwordMap.get(headword);
+      const hwKey = `${levelNum}\0${headword}`;
+      let hwAcc = headwordMap.get(hwKey);
       if (!hwAcc) {
         hwAcc = {
           headword,
@@ -192,7 +193,7 @@ export function computeCorpusStatistics(params: {
           perFileFreq: new Int32Array(fileCount),
           fileSet: new Set<number>(),
         };
-        headwordMap.set(headword, hwAcc);
+        headwordMap.set(hwKey, hwAcc);
       }
       hwAcc.totalFreq += 1;
       hwAcc.perFileFreq[docIdx] += 1;
@@ -297,7 +298,7 @@ export function computeCorpusStatistics(params: {
       rangeBuckets.set(r, bucket);
     }
     bucket.types += 1;
-    bucket.headwords.add(tAcc.headword);
+    bucket.headwords.add(`${tAcc.level}\0${tAcc.headword}`);
   }
 
   const rangeRows: RangeStatRow[] = Array.from(rangeBuckets.entries())
@@ -336,7 +337,9 @@ export function computeCorpusStatistics(params: {
   // Finalize Input File Headword Stats (Tab 6)
   const headwordsSorted = Array.from(headwordMap.values()).sort(
     (a, b) =>
-      b.totalFreq - a.totalFreq || a.headword.localeCompare(b.headword),
+      b.totalFreq - a.totalFreq ||
+      a.headword.localeCompare(b.headword) ||
+      a.level - b.level,
   );
   const headwordStatRows: CorpusWordStatRow[] = headwordsSorted.map(
     (h, idx) => ({

@@ -5,7 +5,11 @@ import {
   ListPlus,
   Package,
 } from 'lucide-react';
-import { readWordlistFilesFromBrowser } from '../../io/fileReaders';
+import { isManifestEntryLoaded } from '../../core/wordlistParser';
+import {
+  formatFileReadErrors,
+  readWordlistFilesFromBrowser,
+} from '../../io/fileReaders';
 import { useProfilerStore } from '../../store/useProfilerStore';
 import type { WordlistManifestEntry } from '../../types/domain';
 import { CoverageRow } from './CoverageRow';
@@ -35,15 +39,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ widthPx }) => {
   const theme = store.theme;
 
   const totalPct = profile?.totalCoveredPercentage ?? 0;
-
-  const alreadyAddedPaths = useMemo(() => {
-    const set = new Set<string>();
-    for (const r of store.referenceLists) {
-      if (r.path) set.add(r.path.replace(/^\.?\/+/, ''));
-      if (r.name) set.add(r.name);
-    }
-    return set;
-  }, [store.referenceLists]);
 
   const bundledByCategory = useMemo(() => {
     const lists = store.manifest?.lists ?? [];
@@ -97,24 +92,16 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ widthPx }) => {
 
   const handleWordlistFiles = async (files: FileList | File[]) => {
     const { lists, errors } = await readWordlistFilesFromBrowser(files);
-    if (errors.length > 0) {
-      store.setErrorBanner(`${errors[0].fileName}: ${errors[0].reason}`);
-    }
+    const readErr = formatFileReadErrors(errors);
     if (lists.length > 0) {
-      await store.addCustomReferenceLists(lists);
+      await store.addCustomReferenceLists(lists, readErr);
+    } else if (readErr) {
+      store.setErrorBanner(readErr);
     }
   };
 
-  const isBundledAlreadyAdded = (entry: WordlistManifestEntry) => {
-    const cleanUrl = entry.url.replace(/^\.?\/+/, '');
-    return (
-      alreadyAddedPaths.has(cleanUrl) ||
-      alreadyAddedPaths.has(entry.name) ||
-      store.referenceLists.some(
-        (r) => r.isBuiltin && (r.path === entry.url || r.name === entry.name),
-      )
-    );
-  };
+  const isBundledAlreadyAdded = (entry: WordlistManifestEntry) =>
+    isManifestEntryLoaded(store.referenceLists, entry);
 
   return (
     <aside className="left-sidebar" style={{ width: `${widthPx}px` }}>

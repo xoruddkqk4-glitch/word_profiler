@@ -80,18 +80,22 @@ export const HelpAboutModal: React.FC = () => {
               <div>
                 <h3 className="help-section-heading">1. 기본 워크플로우</h3>
                 <p className="help-prose">
-                  상단 우측 <strong>Preset</strong>에서 기준 단어장을 선택한 뒤, 좌측{' '}
-                  <strong>Target Files</strong>에 <code>.txt</code> · <code>.docx</code> ·{' '}
-                  <code>.pdf</code> 문서를 추가하거나 중앙 에디터에 영문 지문을 붙여넣고{' '}
+                  상단 우측 <strong>Preset</strong>에서 기준 단어장을 선택하거나 좌측{' '}
+                  <strong>Reference Lists &gt; Add</strong>에서 내장·사용자 단어장을
+                  추가한 뒤, 에디터 툴바의 <strong>Open</strong>(또는 드래그 앤 드롭)으로{' '}
+                  <code>.txt</code> · <code>.docx</code> · <code>.pdf</code> 문서를
+                  불러오거나 <strong>Inline Text</strong>에 지문을 입력해{' '}
                   <strong>Start (F5)</strong>를 실행합니다. 좌측의{' '}
                   <strong>List Words / Non-List Words</strong> 토글로 등재 어휘 레벨별 색상
-                  보기와 미등재(범위 외) 어휘 집중 보기를 즉시 전환할 수 있습니다.
+                  보기와 미등재 어휘 집중 보기를 즉시 전환할 수 있으며, 상단 파일 선택
+                  드롭다운과 <strong>Edit Copy</strong>로 여러 문서 전환 및 직접 수정이
+                  가능합니다.
                 </p>
               </div>
 
               <div>
                 <h3 className="help-section-heading">
-                  2. 내장 프리셋 안내 (GSL/AWL &amp; 2015 개정 영어과 교육과정)
+                  2. 내장 프리셋 안내 (GSL/AWL · 2015 · 2022 개정 영어과 교육과정)
                 </h3>
                 <ul className="help-list">
                   <li>
@@ -99,29 +103,32 @@ export const HelpAboutModal: React.FC = () => {
                     1,000)와 Coxhead의 학술어휘(AWL 570) 표준 3단계 패밀리.
                   </li>
                   <li>
-                    <strong>2015 개정 교육과정 (어휘 패밀리 1~3단계)</strong>:{' '}
-                    <code>4_basewrd1</code>(기초 800) · <code>5_basewrd2</code>(기본 1,200) ·{' '}
-                    <code>6_basewrd3</code>(심화 1,000)로 구성된 총 3,000 어휘 패밀리(굴절·파생형 포함).
+                    <strong>2022 개정 교육과정 (초등·중학·고등)</strong>:{' '}
+                    <code>1_2022_초등</code>(819) · <code>2_2022_중학</code>(1,215) ·{' '}
+                    <code>3_2022_고등</code>(1,249) 및 AWL 결합 프리셋.{' '}
+                    <strong>Master Family</strong> 확장을 켜면 굴절·파생형까지 함께
+                    매칭됩니다.
                   </li>
                   <li>
-                    <strong>2015 개정 교육과정 (초등·중등·전문)</strong>:{' '}
+                    <strong>2015 개정 교육과정 (어휘 패밀리 1~3단계 &amp; 학교급별)</strong>:{' '}
+                    <code>4_basewrd1~3</code> 3,000 어휘 패밀리 및{' '}
                     <code>8_baseword5_초등</code>(801) · <code>9_baseword6_중등</code>(1,850) ·{' '}
-                    <code>10_baseword7_전문</code>(400). <strong>Master Family</strong> 확장을 켜면
-                    복수형·과거형 등 굴절형까지 자동 매칭됩니다.
+                    <code>10_baseword7_전문</code>(400).
                   </li>
                 </ul>
               </div>
 
               <div>
                 <h3 className="help-section-heading">
-                  3. 고유명사·예외 어휘 처리 (Extra Ignore Words)
+                  3. OpenRouter AI 추천 &amp; 예외 어휘 처리 (Extra Ignore Words)
                 </h3>
                 <p className="help-prose">
-                  본문 내 미등재 단어를 클릭하거나 우클릭하여{' '}
-                  <strong>Add to Ignore List</strong>를 실행하면 즉시 예외 어휘로 분류되어
-                  커버리지 계산에 반영됩니다. 우측 <strong>Extra Ignore Words</strong> 영역에
-                  임의 문장을 붙여넣으면 기존 레벨 리스트에 없는 미등재 단어만 자동 선별하여
-                  등록합니다.
+                  본문 단어를 클릭하거나 구문을 드래그한 뒤 우측{' '}
+                  <strong>AI 어휘 도우미</strong>(또는 우클릭 메뉴)에서{' '}
+                  <strong>AI 추천</strong>을 실행하면 활성 Word List 단어만으로 구성된
+                  대체 단어와 패러프레이즈 문장을 모달에서 비교·교체할 수 있습니다. 미등재
+                  고유명사·예외 어휘는 <strong>Add to Ignore List</strong> 또는{' '}
+                  <strong>Ignore</strong> 탭 붙여넣기로 즉시 제외 처리할 수 있습니다.
                 </p>
               </div>
             </div>
@@ -153,16 +160,16 @@ export const HelpAboutModal: React.FC = () => {
                   <td>검색창에서 다음 / 이전 일치 단어로 이동</td>
                 </tr>
                 <tr>
-                  <td className="mono">Double Click (Target File)</td>
-                  <td>선택한 타겟 파일을 File Profiler에 로드 및 분석</td>
+                  <td className="mono">Ctrl + Z / Ctrl + Y</td>
+                  <td>현재 문서 편집 및 AI 교체 실행 취소 / 다시 실행</td>
                 </tr>
                 <tr>
-                  <td className="mono">Right Click (본문 단어)</td>
-                  <td>단어 레벨 확인 및 Extra Ignore Words 즉시 추가/제거</td>
+                  <td className="mono">Drag / Right Click (본문)</td>
+                  <td>구문 선택, AI 추천 모달 실행, 어근 분석 및 Ignore 추가/제거</td>
                 </tr>
                 <tr>
-                  <td className="mono">Drag &amp; Drop</td>
-                  <td>창 어디서든 .txt / .docx / .pdf 지문 일괄 추가</td>
+                  <td className="mono">Drag &amp; Drop (파일)</td>
+                  <td>분석 지문(.txt/.docx/.pdf) 또는 단어장(.txt/.tsv/.lst) 영역별 추가</td>
                 </tr>
               </tbody>
             </table>

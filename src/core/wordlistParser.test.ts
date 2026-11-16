@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   computeLexiconCacheKey,
@@ -110,5 +112,65 @@ describe('computeLexiconCacheKey', () => {
 
     expect(listA.content.length).toBe(listB.content.length);
     expect(keyA).not.toBe(keyB);
+  });
+});
+
+describe('2015word_list_all integrity & explicit tree mode', () => {
+  it('parses all 3,051 curriculum entries including previously collapsed lines', () => {
+    const filePath = resolve(
+      process.cwd(),
+      'public/wordlists/kr2015/2015word_list_all.txt',
+    );
+    const content = readFileSync(filePath, 'utf8');
+    const groups = parseRawFamilyGroups(content, {
+      ignoreCase: true,
+      formatMode: 'auto',
+      stripAnnotations: true,
+    });
+
+    const headwords = new Set(groups.map((g) => g.headword));
+    expect(groups.length).toBe(3051);
+    for (const expected of [
+      'clay',
+      'clean',
+      'continent',
+      'continue',
+      'contract',
+      'contradict',
+      'contrary',
+      'contrast',
+      'contribute',
+      'control',
+      'controversy',
+      'convenient',
+      'convention',
+      'conversation',
+      'convert',
+      'convey',
+      'dip',
+      'diplomat',
+      'farm',
+      'fascinate',
+      'plate',
+      'platform',
+      'et cetera',
+    ]) {
+      expect(headwords.has(expected)).toBe(true);
+    }
+  });
+
+  it('recognizes single-space indented members when formatMode is explicitly trees', () => {
+    const content = ['CREATE', ' creates', ' created'].join('\n');
+    const groups = parseRawFamilyGroups(content, {
+      ignoreCase: true,
+      formatMode: 'trees',
+      stripAnnotations: false,
+    });
+    expect(groups).toHaveLength(1);
+    expect(groups[0].members.map((m) => m.term)).toEqual([
+      'create',
+      'creates',
+      'created',
+    ]);
   });
 });

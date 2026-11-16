@@ -8,6 +8,36 @@ import type {
   ReferenceListSource,
 } from '../types/domain';
 
+export async function copyTextSafe(text: string): Promise<boolean> {
+  if (!text) return false;
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fallback to execCommand below
+  }
+  try {
+    if (typeof document !== 'undefined') {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return ok;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 export function triggerBrowserDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -62,7 +92,7 @@ export function exportProfileAsHtml(
     });
     if (hl.color) {
       bodyChunks.push(
-        `<span style="color:${hl.color};font-weight:500" title="${escapeHtml(tok.listName)} (${escapeHtml(tok.headword)})">${escapeHtml(tok.token)}</span>`,
+        `<span style="color:${escapeHtml(hl.color)};font-weight:500" title="${escapeHtml(tok.listName)} (${escapeHtml(tok.headword)})">${escapeHtml(tok.token)}</span>`,
       );
     } else {
       bodyChunks.push(escapeHtml(tok.token));
@@ -76,16 +106,16 @@ export function exportProfileAsHtml(
     .filter((r) => r.enabled)
     .map((r) => {
       const pct = profile.levelSummaries[r.id]?.percentage ?? 0;
-      return `<span class="chip"><span class="dot" style="background:${r.colorLight}"></span>${escapeHtml(r.name)} (${pct.toFixed(2)}%)</span>`;
+      return `<span class="chip"><span class="dot" style="background:${escapeHtml(r.colorLight)}"></span>${escapeHtml(r.name)} (${pct.toFixed(2)}%)</span>`;
     });
 
   if (options.ignoreEnabled) {
     legendItems.push(
-      `<span class="chip"><span class="dot" style="background:${options.ignoreColor.light}"></span>ignored (${profile.ignoredSummary.percentage.toFixed(2)}%)</span>`,
+      `<span class="chip"><span class="dot" style="background:${escapeHtml(options.ignoreColor.light)}"></span>ignored (${profile.ignoredSummary.percentage.toFixed(2)}%)</span>`,
     );
   }
   legendItems.push(
-    `<span class="chip"><span class="dot" style="background:${options.showLevels ? '#64748b' : options.outColor.light}"></span>not in lists (${profile.outSummary.percentage.toFixed(2)}%)</span>`,
+    `<span class="chip"><span class="dot" style="background:${escapeHtml(options.showLevels ? '#64748b' : options.outColor.light)}"></span>not in lists (${profile.outSummary.percentage.toFixed(2)}%)</span>`,
   );
 
   const html = `<!doctype html>

@@ -6,7 +6,10 @@ import {
   Sparkles,
   Type,
 } from 'lucide-react';
-import { readTargetFilesFromBrowser } from '../../io/fileReaders';
+import {
+  formatFileReadErrors,
+  readTargetFilesFromBrowser,
+} from '../../io/fileReaders';
 import { useProfilerStore } from '../../store/useProfilerStore';
 import { EditorToolbar } from './EditorToolbar';
 import { HighlightedTextView } from './HighlightedTextView';
@@ -74,7 +77,9 @@ export const FileProfilerPane: React.FC<FileProfilerPaneProps> = ({
       <div className="profiler-split-content">
         <div className="profiler-document-stage">
           {isEditingInline ? (
-            store.inlineText.length === 0 && store.targetFiles.length === 0 ? (
+            !store.inlineEditorOpen &&
+            store.inlineText.length === 0 &&
+            store.targetFiles.length === 0 ? (
               <div className="stage-empty-state">
                 <h3 className="stage-empty-title">
                   영어 지문 어휘 레벨 프로파일러
@@ -104,7 +109,7 @@ export const FileProfilerPane: React.FC<FileProfilerPaneProps> = ({
                   <button
                     type="button"
                     className="btn"
-                    onClick={() => store.updateInlineText(' ')}
+                    onClick={store.openEmptyInlineEditor}
                   >
                     <Type size={16} /> 빈 에디터에 직접 입력
                   </button>
@@ -121,10 +126,9 @@ export const FileProfilerPane: React.FC<FileProfilerPaneProps> = ({
                     if (!files?.length) return;
                     const { items, errors } =
                       await readTargetFilesFromBrowser(files);
-                    if (errors.length > 0) {
-                      store.setErrorBanner(
-                        `${errors[0].fileName}: ${errors[0].reason}`,
-                      );
+                    const readErr = formatFileReadErrors(errors);
+                    if (readErr) {
+                      store.setErrorBanner(readErr);
                     }
                     if (items.length > 0) {
                       await store.addTargetFiles(items);
@@ -137,7 +141,7 @@ export const FileProfilerPane: React.FC<FileProfilerPaneProps> = ({
                 className="inline-textarea"
                 style={{ fontSize: `${store.settings.fontSizePx}px` }}
                 placeholder="여기에 분석할 영어 지문을 입력하거나 붙여넣은 뒤 하단 Start (또는 F5) 버튼을 누르세요..."
-                value={store.inlineText === ' ' ? '' : store.inlineText}
+                value={store.inlineText}
                 autoFocus
                 onChange={(e) => store.updateInlineText(e.target.value)}
               />

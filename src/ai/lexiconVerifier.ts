@@ -46,12 +46,14 @@ export interface VerifierContextParams {
   builtinMasterRawContent?: string;
   ignoreEnabled: boolean;
   settings: ProfilerSettings;
+  includeExtendedMetadata?: boolean;
 }
 
 export interface CompiledVerifierContext {
   cacheKey: string;
   compiled: CompiledLexicon;
   activeListCount: number;
+  masterEnabled: boolean;
   inactiveLookup: Map<string, string>; // term -> inactive listName
   masterMemberToHeadword: Map<string, string>;
   settings: ProfilerSettings;
@@ -62,15 +64,22 @@ let cachedVerifierCtx: CompiledVerifierContext | null = null;
 export function getVerifierContext(
   params: VerifierContextParams,
 ): CompiledVerifierContext {
+  const includeExtended = params.includeExtendedMetadata !== false;
   const baseKey = computeLexiconCacheKey(params);
-  const inactiveSig = params.referenceLists
-    .filter((r) => !r.enabled)
-    .map((r) => `${r.id}:${r.content.length}`)
-    .join(',');
-  const masterExtraSig = params.builtinMasterRawContent
-    ? String(params.builtinMasterRawContent.length)
-    : '0';
-  const fullKey = `${baseKey}|inact:${inactiveSig}|bm:${masterExtraSig}`;
+  const inactiveSig = includeExtended
+    ? params.referenceLists
+        .filter((r) => !r.enabled)
+        .map(
+          (r) =>
+            `${r.id}:${r.name}:${r.content.length}:${r.content.slice(0, 48)}:${r.content.slice(-48)}`,
+        )
+        .join(',')
+    : 'skip';
+  const masterExtraSig =
+    includeExtended && params.builtinMasterRawContent
+      ? `${params.builtinMasterRawContent.length}:${params.builtinMasterRawContent.slice(0, 48)}:${params.builtinMasterRawContent.slice(-48)}`
+      : '0';
+  const fullKey = `${baseKey}|ext:${includeExtended ? '1' : '0'}|inact:${inactiveSig}|bm:${masterExtraSig}`;
 
   if (cachedVerifierCtx && cachedVerifierCtx.cacheKey === fullKey) {
     return cachedVerifierCtx;
@@ -86,35 +95,40 @@ export function getVerifierContext(
   });
 
   const inactiveLookup = new Map<string, string>();
-  for (const ref of params.referenceLists) {
-    if (ref.enabled || !ref.content.trim()) continue;
-    const groups = parseRawFamilyGroups(ref.content, {
-      ignoreCase: params.settings.ignoreCase,
-      formatMode: params.settings.nationFormat,
-      stripAnnotations: params.settings.stripCurriculumAnnotations,
-    });
-    for (const g of groups) {
-      for (const m of g.members) {
-        if (!inactiveLookup.has(m.term)) {
-          inactiveLookup.set(m.term, ref.name);
+  const masterMemberToHeadword = new Map<string, string>();
+
+  if (includeExtended) {
+    for (const ref of params.referenceLists) {
+      if (ref.enabled || !ref.content.trim()) continue;
+      const groups = parseRawFamilyGroups(ref.content, {
+        ignoreCase: params.settings.ignoreCase,
+        formatMode: params.settings.nationFormat,
+        stripAnnotations: params.settings.stripCurriculumAnnotations,
+      });
+      for (const g of groups) {
+        for (const m of g.members) {
+          if (!inactiveLookup.has(m.term)) {
+            inactiveLookup.set(m.term, ref.name);
+          }
         }
       }
     }
-  }
 
-  const masterMemberToHeadword = new Map<string, string>();
-  const masterSource =
-    params.masterList.content.trim() || params.builtinMasterRawContent || '';
-  if (masterSource.trim()) {
-    const groups = parseRawFamilyGroups(masterSource, {
-      ignoreCase: params.settings.ignoreCase,
-      formatMode: params.settings.nationFormat,
-      stripAnnotations: params.settings.stripCurriculumAnnotations,
-    });
-    for (const g of groups) {
-      for (const m of g.members) {
-        if (!masterMemberToHeadword.has(m.term)) {
-          masterMemberToHeadword.set(m.term, g.headword);
+    const masterSource =
+      (params.masterList.enabled ? params.masterList.content.trim() : '') ||
+      params.builtinMasterRawContent ||
+      '';
+    if (masterSource.trim()) {
+      const groups = parseRawFamilyGroups(masterSource, {
+        ignoreCase: params.settings.ignoreCase,
+        formatMode: params.settings.nationFormat,
+        stripAnnotations: params.settings.stripCurriculumAnnotations,
+      });
+      for (const g of groups) {
+        for (const m of g.members) {
+          if (!masterMemberToHeadword.has(m.term)) {
+            masterMemberToHeadword.set(m.term, g.headword);
+          }
         }
       }
     }
@@ -126,6 +140,7 @@ export function getVerifierContext(
     cacheKey: fullKey,
     compiled,
     activeListCount,
+    masterEnabled: Boolean(params.masterList.enabled),
     inactiveLookup,
     masterMemberToHeadword,
     settings: params.settings,
@@ -333,6 +348,17 @@ export function matchSurfaceCapitalization(
   return trimmed;
 }
 
+export function sanitizeSingleTokenReplacement(
+  originalToken: string,
+  replacementText: string,
+): string {
+  let clean = replacementText.trim().replace(/^[“"']|[”"']$/g, '').trim();
+  if (!/[.?!]$/.test(originalToken)) {
+    clean = clean.replace(/[.?!]+$/, '').trim();
+  }
+  return matchSurfaceCapitalization(originalToken, clean);
+}
+
 /**
  * Replaces tokens[startIdx..endIdx] in `profile` with `replacementText`
  * while preserving leading/trailing whitespace and avoiding duplicate terminal punctuation.
@@ -353,11 +379,7 @@ export function buildReplacedDocumentText(
   const isSingleToken = lo === hi;
 
   if (isSingleToken) {
-    cleanReplacement = cleanReplacement.replace(/^[“"']|[”"']$/g, '').trim();
-    if (!/[.?!]$/.test(tokens[lo].token)) {
-      cleanReplacement = cleanReplacement.replace(/[.?!]+$/, '').trim();
-    }
-    cleanReplacement = matchSurfaceCapitalization(
+    cleanReplacement = sanitizeSingleTokenReplacement(
       tokens[lo].token,
       cleanReplacement,
     );
@@ -369,9 +391,12 @@ export function buildReplacedDocumentText(
   }
 
   let endTrailingWs = tokens[hi].trailingWs;
-  // Prevent double terminal punctuation (e.g. `well.` + `.\n\n` -> `well..\n\n`)
-  if (/([.?!]+["'”’)\]}]*)$/.test(cleanReplacement)) {
-    endTrailingWs = endTrailingWs.replace(/^[.?!]+["'”’)\]}]*/, '');
+  // Prevent double terminal punctuation while preserving closing quotes/brackets
+  // when the replacement itself does not include them.
+  if (/[.?!]+["'”’)\]}]+$/.test(cleanReplacement)) {
+    endTrailingWs = endTrailingWs.replace(/^\s*[.?!]+["'”’)\]}]*/, '');
+  } else if (/[.?!]+$/.test(cleanReplacement)) {
+    endTrailingWs = endTrailingWs.replace(/^\s*[.?!]+/, '');
   }
 
   let suffix = endTrailingWs;

@@ -270,8 +270,11 @@ export const SettingsModal: React.FC = () => {
                         기본값: <code className="mono">[\p&#123;L&#125;]+</code>{' '}
                         · 아포스트로피 축약형 포함 예:{' '}
                         <code className="mono">
-                          [\p&#123;L&#125;]+(?:&apos;[\p&#123;L&#125;]+)?
-                        </code>
+                          [\p&#123;L&#125;]+(?:[&apos;’][\p&#123;L&#125;]+)?
+                        </code>{' '}
+                        (주의: 내장 GSL·교육과정 단어장은 <code>don</code> +{' '}
+                        <code>t</code> 분리 기준이므로 축약형 통합 시 사용자
+                        단어장에 <code>don&apos;t</code> 형태가 있어야 매칭됩니다)
                       </div>
                     )}
                   </div>

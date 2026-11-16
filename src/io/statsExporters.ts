@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import type { StatsSubTabId } from '../types/domain';
 import type { CorpusStatisticsBundle } from '../types/stats';
-import { triggerBrowserDownload } from './docExporters';
+import { copyTextSafe, triggerBrowserDownload } from './docExporters';
 
 export type CellValue = string | number;
 
@@ -198,10 +198,14 @@ export function buildSheetForSubTab(
   }
 }
 
+function sanitizeTsvCell(val: CellValue): string {
+  return String(val).replace(/[\t\r\n]+/g, ' ');
+}
+
 export function sheetToTsvString(sheet: TabularExportSheet): string {
   const lines = [
-    sheet.headers.join('\t'),
-    ...sheet.rows.map((row) => row.map((c) => String(c)).join('\t')),
+    sheet.headers.map(sanitizeTsvCell).join('\t'),
+    ...sheet.rows.map((row) => row.map(sanitizeTsvCell).join('\t')),
   ];
   return lines.join('\n');
 }
@@ -210,8 +214,12 @@ export function exportSingleStatTabAsTsv(
   bundle: CorpusStatisticsBundle,
   subTab: StatsSubTabId,
   showFullPaths: boolean,
+  options?: { hideCumulativeInCoverage?: boolean },
 ): void {
-  const sheet = buildSheetForSubTab(bundle, subTab, { showFullPaths });
+  const sheet = buildSheetForSubTab(bundle, subTab, {
+    showFullPaths,
+    hideCumulativeInCoverage: options?.hideCumulativeInCoverage,
+  });
   const tsv = '\uFEFF' + sheetToTsvString(sheet);
   const blob = new Blob([tsv], {
     type: 'text/tab-separated-values;charset=utf-8',
@@ -249,8 +257,8 @@ export function exportAllStatsAsXlsx(
 
 export async function copySheetToClipboard(
   sheet: TabularExportSheet,
-): Promise<void> {
+): Promise<boolean> {
   const tsv = sheetToTsvString(sheet);
-  await navigator.clipboard.writeText(tsv);
+  return copyTextSafe(tsv);
 }
 

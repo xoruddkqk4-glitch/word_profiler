@@ -3,6 +3,7 @@ import type {
   ListFormatMode,
   ProfilerSettings,
   ReferenceListSource,
+  WordlistManifestEntry,
 } from '../types/domain';
 import type { LevelListStatRow } from '../types/stats';
 import type { ExportedLevelGroup } from '../types/workerMessages';
@@ -91,7 +92,8 @@ function detectNationTreeFormat(lines: string[]): boolean {
   let sawHeadword = false;
 
   for (const rawLine of lines) {
-    if (!rawLine.trim()) continue;
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) continue;
     nonEmpty += 1;
     const isIndented = /^(?:\t+|\s{2,}|->\s*)\S/.test(rawLine);
     if (isIndented) {
@@ -147,10 +149,14 @@ export function parseRawFamilyGroups(
   if (isTreeMode) {
     let currentHeadword: string | null = null;
     let currentMembers: Map<string, string> | null = null;
+    const indentPattern =
+      formatMode === 'trees'
+        ? /^(?:\t+|\s+|->\s*)\S/
+        : /^(?:\t+|\s{2,}|->\s*)\S/;
 
     for (const rawLine of lines) {
       if (!rawLine.trim()) continue;
-      const isIndented = /^(?:\t+|\s{2,}|->\s*)/.test(rawLine);
+      const isIndented = indentPattern.test(rawLine);
       const strippedLine = rawLine.replace(/^(?:\t+|\s+|->\s*)/, '');
       const tokens = strippedLine.split(/\t+/);
 
@@ -292,6 +298,7 @@ export function computeLexiconCacheKey(params: {
 
   feed(String(params.ignoreList.enabled));
   if (params.ignoreList.enabled && params.ignoreEnabled) {
+    feed(params.ignoreList.path);
     feedContentFingerprint(params.ignoreList.content);
   }
 
@@ -545,5 +552,22 @@ export function exportCompiledLevelGroups(
       listName: pl.name,
       families,
     };
+  });
+}
+
+export function isManifestEntryLoaded(
+  referenceLists: readonly Pick<
+    ReferenceListSource,
+    'path' | 'name' | 'isBuiltin'
+  >[],
+  entry: Pick<WordlistManifestEntry, 'url' | 'name'>,
+): boolean {
+  const cleanEntryUrl = entry.url.replace(/^\.?\/+/, '');
+  return referenceLists.some((r) => {
+    const cleanRefPath = r.path.replace(/^\.?\/+/, '');
+    return (
+      cleanRefPath === cleanEntryUrl ||
+      (r.isBuiltin && r.name === entry.name)
+    );
   });
 }

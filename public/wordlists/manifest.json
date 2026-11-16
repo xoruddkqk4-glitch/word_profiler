@@ -84,10 +84,10 @@
     {
       "id": "kr2015-annotated-all",
       "name": "2015word_list_all",
-      "displayName": "2015word_list_all (2015 교육과정 전체 주석본 3,036)",
+      "displayName": "2015word_list_all (2015 교육과정 전체 주석본 3,051)",
       "category": "kr2015_school",
       "url": "wordlists/kr2015/2015word_list_all.txt",
-      "description": "2015 개정 영어과 교육과정 기본어휘 전체 목록 (* 초등, ** 진로·전문 표기 포함)"
+      "description": "2015 개정 영어과 교육과정 기본어휘 전체 목록 (* 초등, ** 진로·전문 표기 포함 3,051어)"
     },
     {
       "id": "kr2022-elem",

@@ -502,7 +502,8 @@ classic
 classify 
 classroom * 
 clause 
-clay clean * 
+clay 
+clean * 
 clear * 
 clerk * 
 clever * 
@@ -618,9 +619,20 @@ contend **
 content 
 contest * 
 context 
-continent continue 
-contract contradict ** contrary 
-contrast contribute control * controversy convenient convention ** conversation convert ** convey 
+continent 
+continue 
+contract 
+contradict ** 
+contrary 
+contrast 
+contribute 
+control * 
+controversy 
+convenient 
+convention ** 
+conversation 
+convert ** 
+convey 
 convict 
 convince 
 cook *
@@ -824,7 +836,8 @@ dimension **
 diminish 
 dine ** 
 dinner * 
-dip diplomat 
+dip 
+diplomat 
 direct 
 dirty * 
 disabled 
@@ -1072,7 +1085,8 @@ fancy
 fantastic * 
 far * 
 fare 
-farm * fascinate 
+farm * 
+fascinate 
 fast * 
 fasten 
 fat * 
@@ -2019,7 +2033,8 @@ plain
 plan * 
 planet 
 plant 
-plate platform 
+plate 
+platform 
 play * 
 pleasant 
 please * 

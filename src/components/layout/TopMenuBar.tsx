@@ -19,13 +19,16 @@ import {
   Sun,
   Upload,
 } from 'lucide-react';
+import { isManifestEntryLoaded } from '../../core/wordlistParser';
 import {
+  copyTextSafe,
   exportProfileAsDocx,
   exportProfileAsHtml,
   exportProfileAsTxt,
 } from '../../io/docExporters';
 import {
   decodeTextBufferSmart,
+  formatFileReadErrors,
   readTargetFilesFromBrowser,
   readWordlistFilesFromBrowser,
 } from '../../io/fileReaders';
@@ -100,17 +103,19 @@ export const TopMenuBar: React.FC = () => {
       return;
     }
     const rect = btnEl.getBoundingClientRect();
-    setMenuPos({ top: rect.bottom + 4, left: Math.max(8, rect.left) });
+    setMenuPos({
+      top: rect.bottom + 4,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - 304)),
+    });
     setOpenMenu(key);
   };
 
   const handleOpenTargetFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const { items, errors } = await readTargetFilesFromBrowser(files);
-    if (errors.length > 0) {
-      store.setErrorBanner(
-        `${errors[0].fileName}: ${errors[0].reason}`,
-      );
+    const readErr = formatFileReadErrors(errors);
+    if (readErr) {
+      store.setErrorBanner(readErr);
     }
     if (items.length > 0) {
       await store.addTargetFiles(items);
@@ -120,11 +125,11 @@ export const TopMenuBar: React.FC = () => {
   const handleOpenRefLists = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const { lists, errors } = await readWordlistFilesFromBrowser(files);
-    if (errors.length > 0) {
-      store.setErrorBanner(`${errors[0].fileName}: ${errors[0].reason}`);
-    }
+    const readErr = formatFileReadErrors(errors);
     if (lists.length > 0) {
-      await store.addCustomReferenceLists(lists);
+      await store.addCustomReferenceLists(lists, readErr);
+    } else if (readErr) {
+      store.setErrorBanner(readErr);
     }
   };
 
@@ -148,7 +153,7 @@ export const TopMenuBar: React.FC = () => {
       const txt =
         store.activeProfile?.originalText ?? store.inlineText;
       if (txt) {
-        await navigator.clipboard.writeText(txt);
+        await copyTextSafe(txt);
       }
     } else if (store.statsBundle) {
       const sheet = buildSheetForSubTab(
@@ -335,10 +340,10 @@ export const TopMenuBar: React.FC = () => {
             const parsed = parseSettingsFileContent(raw, store.settings);
             await store.updateSettings(parsed.settings);
             if (parsed.extraIgnoreWords) {
-              await store.clearAllExtraIgnoreWords();
-              for (const w of parsed.extraIgnoreWords) {
-                await store.addExtraIgnoreWord(w);
-              }
+              await store.replaceExtraIgnoreWords(parsed.extraIgnoreWords);
+            }
+            if (parsed.warnings.length > 0) {
+              store.setErrorBanner(parsed.warnings[0]);
             }
           } catch (err) {
             store.setErrorBanner(
@@ -632,21 +637,32 @@ export const TopMenuBar: React.FC = () => {
                     <div className="menu-section-caption">
                       Add Bundled List (GSL / AWL / 2015·2022 교육과정)
                     </div>
-                    {store.manifest.lists.map((l) => (
-                      <button
-                        key={l.id}
-                        type="button"
-                        className="menu-item"
-                        onClick={() => {
-                          setOpenMenu(null);
-                          void store.addBundledReferenceList(l.id);
-                        }}
-                      >
-                        <span className="menu-item-left">
-                          <Layers size={13} /> {l.displayName}
-                        </span>
-                      </button>
-                    ))}
+                    {store.manifest.lists.map((l) => {
+                      const added = isManifestEntryLoaded(
+                        store.referenceLists,
+                        l,
+                      );
+                      return (
+                        <button
+                          key={l.id}
+                          type="button"
+                          className="menu-item"
+                          disabled={added}
+                          title={
+                            added ? '이미 추가된 단어장입니다' : l.description
+                          }
+                          onClick={() => {
+                            setOpenMenu(null);
+                            void store.addBundledReferenceList(l.id);
+                          }}
+                        >
+                          <span className="menu-item-left">
+                            <Layers size={13} /> {l.displayName}
+                          </span>
+                          {added && <span className="menu-shortcut">추가됨</span>}
+                        </button>
+                      );
+                    })}
                   </>
                 )}
 

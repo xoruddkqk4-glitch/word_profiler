@@ -1,3 +1,4 @@
+import { validateAndCompileTokenRegex } from '../core/tokenizer';
 import type { ListFormatMode, MainTabId, ProfilerSettings } from '../types/domain';
 import { triggerBrowserDownload } from './docExporters';
 
@@ -40,26 +41,86 @@ function unquote(val: string): string {
   return t;
 }
 
+function normalizeExtraIgnoreWords(raw: unknown[]): string[] {
+  return raw.map((w) => String(w).trim()).filter(Boolean);
+}
+
+function clampFontSizePx(val: number): number {
+  return Math.min(32, Math.max(14, Math.round(val)));
+}
+
 export function parseSettingsFileContent(
   content: string,
   currentSettings: ProfilerSettings,
-): { settings: ProfilerSettings; extraIgnoreWords?: string[] } {
+): { settings: ProfilerSettings; extraIgnoreWords?: string[]; warnings: string[] } {
   const trimmed = content.trim();
+  const warnings: string[] = [];
+
   if (trimmed.startsWith('{')) {
     const parsed = JSON.parse(trimmed) as Partial<ExportedConfigPayload>;
+    const rawSettings =
+      parsed.settings && typeof parsed.settings === 'object'
+        ? (parsed.settings as Partial<Record<keyof ProfilerSettings, unknown>>)
+        : {};
+    const next: ProfilerSettings = { ...currentSettings };
+
+    if (typeof rawSettings.ignoreCase === 'boolean') {
+      next.ignoreCase = rawSettings.ignoreCase;
+    }
+    if (typeof rawSettings.showLevels === 'boolean') {
+      next.showLevels = rawSettings.showLevels;
+    }
+    if (
+      rawSettings.defaultTab === 'profiler' ||
+      rawSettings.defaultTab === 'statistics'
+    ) {
+      next.defaultTab = rawSettings.defaultTab;
+    }
+    if (
+      rawSettings.nationFormat === 'auto' ||
+      rawSettings.nationFormat === 'rows' ||
+      rawSettings.nationFormat === 'trees'
+    ) {
+      next.nationFormat = rawSettings.nationFormat;
+    }
+    if (typeof rawSettings.stripCurriculumAnnotations === 'boolean') {
+      next.stripCurriculumAnnotations = rawSettings.stripCurriculumAnnotations;
+    }
+    if (
+      typeof rawSettings.fontSizePx === 'number' &&
+      Number.isFinite(rawSettings.fontSizePx) &&
+      rawSettings.fontSizePx > 0
+    ) {
+      next.fontSizePx = clampFontSizePx(rawSettings.fontSizePx);
+    }
+    if (typeof rawSettings.showFullPathsInStats === 'boolean') {
+      next.showFullPathsInStats = rawSettings.showFullPathsInStats;
+    }
+    if (typeof rawSettings.tokenDefinition === 'string') {
+      const candidateTokenDef = rawSettings.tokenDefinition.trim();
+      const check = validateAndCompileTokenRegex(
+        candidateTokenDef,
+        next.ignoreCase,
+      );
+      if (check.ok) {
+        next.tokenDefinition = candidateTokenDef;
+      } else {
+        warnings.push(`TOKEN_DEFINITION이 유효하지 않아 기존 설정을 유지했습니다 (${check.error}).`);
+      }
+    }
+
     return {
-      settings: {
-        ...currentSettings,
-        ...(parsed.settings ?? {}),
-      },
+      settings: next,
       extraIgnoreWords: Array.isArray(parsed.extraIgnoreWords)
-        ? parsed.extraIgnoreWords.map(String)
+        ? normalizeExtraIgnoreWords(parsed.extraIgnoreWords)
         : undefined,
+      warnings,
     };
   }
 
   // Parse Python configparser INI (`[DEFAULT]`)
   const next: ProfilerSettings = { ...currentSettings };
+  let rawTokenDef: string | null = null;
   let extraIgnoreWords: string[] | undefined;
 
   for (const rawLine of trimmed.split(/\r?\n/)) {
@@ -74,18 +135,28 @@ export function parseSettingsFileContent(
 
     switch (key) {
       case 'TOKEN_DEFINITION':
-        if (rawVal) next.tokenDefinition = unquote(rawVal);
+        if (rawVal) rawTokenDef = unquote(rawVal).trim();
         break;
-      case 'IGNORE_CASE':
-        next.ignoreCase = rawVal.toLowerCase() === 'true';
+      case 'IGNORE_CASE': {
+        const lower = rawVal.toLowerCase();
+        if (lower === 'true' || lower === 'false') {
+          next.ignoreCase = lower === 'true';
+        }
         break;
-      case 'SHOW_LEVELS':
-        next.showLevels = rawVal.toLowerCase() === 'true';
+      }
+      case 'SHOW_LEVELS': {
+        const lower = rawVal.toLowerCase();
+        if (lower === 'true' || lower === 'false') {
+          next.showLevels = lower === 'true';
+        }
         break;
+      }
       case 'DEFAULT_TAB': {
         const n = Number(rawVal);
-        const tab: MainTabId = n === 1 ? 'statistics' : 'profiler';
-        next.defaultTab = tab;
+        if (n === 0 || n === 1) {
+          const tab: MainTabId = n === 1 ? 'statistics' : 'profiler';
+          next.defaultTab = tab;
+        }
         break;
       }
       case 'NATION_FORMAT': {
@@ -97,19 +168,23 @@ export function parseSettingsFileContent(
       }
       case 'SYSTEM_FONT_SIZE': {
         const pt = Number(rawVal);
-        if (Number.isFinite(pt) && pt >= 6 && pt <= 48) {
-          next.fontSizePx = Math.round(pt * (4 / 3));
+        if (Number.isFinite(pt) && pt > 0) {
+          next.fontSizePx = clampFontSizePx(pt * (4 / 3));
         }
         break;
       }
-      case 'STRIP_CURRICULUM_ANNOTATIONS':
-        next.stripCurriculumAnnotations = rawVal.toLowerCase() === 'true';
+      case 'STRIP_CURRICULUM_ANNOTATIONS': {
+        const lower = rawVal.toLowerCase();
+        if (lower === 'true' || lower === 'false') {
+          next.stripCurriculumAnnotations = lower === 'true';
+        }
         break;
+      }
       case 'IGNORE_LIST_EXTRAS':
         try {
           const arr = JSON.parse(rawVal.replace(/'/g, '"'));
           if (Array.isArray(arr)) {
-            extraIgnoreWords = arr.map(String);
+            extraIgnoreWords = normalizeExtraIgnoreWords(arr);
           }
         } catch {
           // ignore malformed array
@@ -118,7 +193,16 @@ export function parseSettingsFileContent(
     }
   }
 
-  return { settings: next, extraIgnoreWords };
+  if (rawTokenDef !== null) {
+    const check = validateAndCompileTokenRegex(rawTokenDef, next.ignoreCase);
+    if (check.ok) {
+      next.tokenDefinition = rawTokenDef;
+    } else {
+      warnings.push(`TOKEN_DEFINITION이 유효하지 않아 기존 설정을 유지했습니다 (${check.error}).`);
+    }
+  }
+
+  return { settings: next, extraIgnoreWords, warnings };
 }
 
 export function exportSettingsFile(

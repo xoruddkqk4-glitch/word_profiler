@@ -6,7 +6,7 @@ import {
 import {
   buildReplacedDocumentText,
   getVerifierContext,
-  matchSurfaceCapitalization,
+  sanitizeSingleTokenReplacement,
   sliceProfileSpanText,
 } from '../ai/lexiconVerifier';
 import {
@@ -17,10 +17,15 @@ import {
 import {
   DEFAULT_IGNORE_COLOR,
   DEFAULT_OUT_HIGHLIGHT_COLOR,
+  ensureReadableOnDark,
+  ensureReadableOnLight,
   getDefaultLevelColorPair,
   type LevelColorPair,
 } from '../core/colorPalette';
-import { parseRawFamilyGroups } from '../core/wordlistParser';
+import {
+  isManifestEntryLoaded,
+  parseRawFamilyGroups,
+} from '../core/wordlistParser';
 import type {
   CombinedSuggestionResult,
   InspectorBodyTab,
@@ -169,6 +174,8 @@ async function fetchStaticText(url: string): Promise<string> {
 let profileJobEpoch = 0;
 let statsJobEpoch = 0;
 let activeAiAbortController: AbortController | null = null;
+const MAX_AI_SUGGESTION_CACHE = 32;
+const aiSuggestionCache = new Map<string, CombinedSuggestionResult>();
 
 function cancelActiveAiCall(): boolean {
   if (activeAiAbortController) {
@@ -223,6 +230,7 @@ export interface ProfilerStoreState {
   fileHistories: Record<string, DocumentHistoryEntry>;
   selectedTargetIds: string[];
   activeTargetFileId: string | null; // null = inline text mode
+  inlineEditorOpen: boolean;
   inlineText: string;
   inlineHistory: string[];
   inlineHistoryIndex: number;
@@ -290,6 +298,7 @@ export interface ProfilerStoreState {
   addBundledReferenceList: (manifestListId: string) => Promise<void>;
   addCustomReferenceLists: (
     lists: { name: string; path: string; content: string }[],
+    priorError?: string | null,
   ) => Promise<void>;
   toggleReferenceList: (id: string) => Promise<void>;
   moveReferenceList: (id: string, direction: 'up' | 'down') => Promise<void>;
@@ -319,6 +328,7 @@ export interface ProfilerStoreState {
   addExtraIgnoreWord: (word: string) => Promise<void>;
   removeExtraIgnoreWords: (words: string[]) => Promise<void>;
   clearAllExtraIgnoreWords: () => Promise<void>;
+  replaceExtraIgnoreWords: (words: string[]) => Promise<void>;
   pasteIntoExtraIgnoreWords: (
     rawText: string,
   ) => Promise<{ added: number; skippedInLists: number }>;
@@ -327,8 +337,13 @@ export interface ProfilerStoreState {
   addTargetFiles: (items: TargetFileItem[]) => Promise<void>;
   setSelectedTargetIds: (ids: string[]) => void;
   openTargetFileInProfiler: (id: string) => Promise<void>;
-  switchToInlineEditor: (initialText?: string) => Promise<void>;
+  openEmptyInlineEditor: () => void;
+  switchToInlineEditor: (
+    initialText?: string,
+    options?: { mode?: 'profiled' | 'edit' },
+  ) => Promise<void>;
   loadSamplePassage: () => Promise<void>;
+  closeTargetFileById: (id: string) => Promise<void>;
   removeSelectedTargetFiles: () => Promise<void>;
   clearAllTargetFiles: () => Promise<void>;
 
@@ -362,7 +377,7 @@ export interface ProfilerStoreState {
   // Settings & Modals
   updateSettings: (patch: Partial<ProfilerSettings>) => Promise<void>;
   resetDefaultSettings: () => Promise<void>;
-  AdjustFontSize: (delta: number) => void;
+  adjustFontSize: (delta: number) => void;
   setSettingsModalOpen: (open: boolean, section?: SettingsSectionId) => void;
   setHelpModalTab: (tab: 'guide' | 'shortcuts' | 'about' | null) => void;
   openCoverageModalForKey: (key: string) => void;
@@ -374,7 +389,9 @@ export interface ProfilerStoreState {
   clearOpenRouterKey: () => void;
   cancelAiRequest: () => void;
   runAiMorphologyCheck: () => Promise<void>;
-  openAiSuggestionModal: () => Promise<void>;
+  openAiSuggestionModal: (options?: {
+    forceRefresh?: boolean;
+  }) => Promise<void>;
   closeAiSuggestionModal: () => void;
 }
 
@@ -385,12 +402,17 @@ function computeSearchMatches(
 ): number[] {
   if (!profile || !query.trim()) return [];
   const q = query.trim();
+  const flags = ignoreCase ? 'iu' : 'u';
   let regex: RegExp;
   try {
-    regex = new RegExp(`^${q}$`, ignoreCase ? 'iu' : 'u');
+    const candidate = new RegExp(q, flags);
+    if (candidate.test('')) {
+      throw new Error('Zero-length regex match');
+    }
+    regex = candidate;
   } catch {
     const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    regex = new RegExp(escaped, ignoreCase ? 'iu' : 'u');
+    regex = new RegExp(escaped, flags);
   }
 
   const hits: number[] = [];
@@ -419,6 +441,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
   /** Abort in-flight AI and clear loading/error/results/modal together. */
   const abortAndResetAiSession = () => {
     cancelActiveAiCall();
+    aiSuggestionCache.clear();
     set({
       aiLoading: false,
       aiError: null,
@@ -432,16 +455,27 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     set({ aiLoading: false });
   };
 
+  const getActiveDocumentText = (): string => {
+    const st = get();
+    if (st.activeTargetFileId === null) return st.inlineText;
+    return (
+      st.targetFiles.find((f) => f.id === st.activeTargetFileId)?.content ?? ''
+    );
+  };
+
   const assertProfileStillCurrent = (
     sourceOriginalText: string,
     sourceId: string,
   ): boolean => {
     const profile = get().activeProfile;
     if (!profile) return false;
-    return (
-      profile.sourceId === sourceId &&
-      profile.originalText === sourceOriginalText
-    );
+    if (
+      profile.sourceId !== sourceId ||
+      profile.originalText !== sourceOriginalText
+    ) {
+      return false;
+    }
+    return getActiveDocumentText() === profile.originalText;
   };
 
   const persistSnapshot = () => {
@@ -533,6 +567,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     fileHistories: {},
     selectedTargetIds: [],
     activeTargetFileId: null,
+    inlineEditorOpen: false,
     inlineText: '',
     inlineHistory: [''],
     inlineHistoryIndex: 0,
@@ -665,9 +700,11 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       const preset = manifest.presets.find((p) => p.id === presetId);
       if (!preset) return;
 
+      abortAndResetAiSession();
       set({
         isBusy: true,
         progressPercent: 15,
+        lastAddedReferenceListId: null,
         statusMessage: `'${preset.shortLabel}' 단어장 로드 중...`,
       });
 
@@ -758,12 +795,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       const entry = manifest.lists.find((l) => l.id === manifestListId);
       if (!entry) return;
 
-      const already = referenceLists.some(
-        (r) =>
-          r.path === entry.url ||
-          (r.isBuiltin && r.name === entry.name),
-      );
-      if (already) {
+      if (isManifestEntryLoaded(referenceLists, entry)) {
         set({
           errorBanner: `이미 추가된 단어장입니다: ${entry.displayName}`,
         });
@@ -804,6 +836,11 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
           isBusy: false,
           statusMessage: `레퍼런스 리스트 추가됨: ${entry.name} (${entryCount.toLocaleString()} 어형)`,
         });
+        setTimeout(() => {
+          if (get().lastAddedReferenceListId === added.id) {
+            set({ lastAddedReferenceListId: null });
+          }
+        }, 1600);
         persistSnapshot();
         await get().runProfileActive();
       } catch (err) {
@@ -814,8 +851,11 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       }
     },
 
-    addCustomReferenceLists: async (lists) => {
-      if (lists.length === 0) return;
+    addCustomReferenceLists: async (lists, priorError) => {
+      if (lists.length === 0) {
+        if (priorError) set({ errorBanner: priorError });
+        return;
+      }
       const current = get().referenceLists;
       const settings = get().settings;
       const additions: ReferenceListSource[] = [];
@@ -841,10 +881,15 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         });
       });
 
-      if (rejected.length > 0) {
-        set({
-          errorBanner: `단어가 파싱되지 않아 제외됨: ${rejected.join(', ')}`,
-        });
+      const rejectMessage =
+        rejected.length > 0
+          ? `단어가 파싱되지 않아 제외됨: ${rejected.join(', ')}`
+          : null;
+      const combinedError = [priorError, rejectMessage]
+        .filter(Boolean)
+        .join(' · ');
+      if (combinedError) {
+        set({ errorBanner: combinedError });
       }
       if (additions.length === 0) return;
 
@@ -859,6 +904,11 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         statsStale: true,
         statusMessage: `${additions.length}개 사용자 레퍼런스 리스트 추가됨`,
       });
+      setTimeout(() => {
+        if (get().lastAddedReferenceListId === lastId) {
+          set({ lastAddedReferenceListId: null });
+        }
+      }, 1600);
       persistSnapshot();
       await get().runProfileActive();
     },
@@ -898,12 +948,14 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
 
     setReferenceListColor: (id, hexColor) => {
       const theme = get().theme;
+      const nextLight =
+        theme === 'dark' ? ensureReadableOnLight(hexColor) : hexColor;
+      const nextDark =
+        theme === 'dark' ? hexColor : ensureReadableOnDark(hexColor);
       set((st) => ({
         referenceLists: st.referenceLists.map((r) =>
           r.id === id
-            ? theme === 'dark'
-              ? { ...r, colorDark: hexColor }
-              : { ...r, colorLight: hexColor }
+            ? { ...r, colorLight: nextLight, colorDark: nextDark }
             : r,
         ),
       }));
@@ -927,6 +979,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       set({
         activePresetId: null,
         referenceLists: [],
+        lastAddedReferenceListId: null,
         ...clearAiResults(),
         statsStale: true,
         statusMessage: '모든 레퍼런스 리스트를 닫았습니다.',
@@ -949,31 +1002,35 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     },
 
     setIgnoreEnabled: async (enabled) => {
+      abortAndResetAiSession();
       set({ ignoreEnabled: enabled, statsStale: true });
       await get().runProfileActive();
     },
 
     setIgnoreColor: (hexColor) => {
       const theme = get().theme;
-      set((st) => ({
-        ignoreColor:
-          theme === 'dark'
-            ? { ...st.ignoreColor, dark: hexColor }
-            : { ...st.ignoreColor, light: hexColor },
-      }));
+      const nextLight =
+        theme === 'dark' ? ensureReadableOnLight(hexColor) : hexColor;
+      const nextDark =
+        theme === 'dark' ? hexColor : ensureReadableOnDark(hexColor);
+      set({
+        ignoreColor: { light: nextLight, dark: nextDark },
+      });
     },
 
     setOutColor: (hexColor) => {
       const theme = get().theme;
-      set((st) => ({
-        outColor:
-          theme === 'dark'
-            ? { ...st.outColor, dark: hexColor }
-            : { ...st.outColor, light: hexColor },
-      }));
+      const nextLight =
+        theme === 'dark' ? ensureReadableOnLight(hexColor) : hexColor;
+      const nextDark =
+        theme === 'dark' ? hexColor : ensureReadableOnDark(hexColor);
+      set({
+        outColor: { light: nextLight, dark: nextDark },
+      });
     },
 
     loadCustomIgnoreList: async (name, path, content) => {
+      abortAndResetAiSession();
       set({
         ignoreList: { enabled: true, name, path, content, isBuiltin: false },
         ignoreEnabled: true,
@@ -984,6 +1041,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     },
 
     closeIgnoreListFile: async () => {
+      abortAndResetAiSession();
       set({
         ignoreList: {
           enabled: false,
@@ -999,6 +1057,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
 
     toggleBuiltinMasterList: async (enable) => {
       const { manifest } = get();
+      abortAndResetAiSession();
       if (!enable) {
         set({
           masterList: {
@@ -1007,7 +1066,6 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
             path: '',
             content: '',
           },
-          morphologyResult: null,
           statsStale: true,
           statusMessage: 'Master 패밀리 확장이 해제되었습니다.',
         });
@@ -1032,7 +1090,6 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
             content,
             isBuiltin: true,
           },
-          morphologyResult: null,
           isBusy: false,
           statsStale: true,
           statusMessage: '내장 Master 패밀리 사전(3,463 패밀리) 활성화됨',
@@ -1047,9 +1104,9 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     },
 
     loadCustomMasterList: async (name, path, content) => {
+      abortAndResetAiSession();
       set({
         masterList: { enabled: true, name, path, content, isBuiltin: false },
-        morphologyResult: null,
         statsStale: true,
         statusMessage: `사용자 Master 리스트 적용됨: ${name}`,
       });
@@ -1057,6 +1114,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     },
 
     closeMasterList: async () => {
+      abortAndResetAiSession();
       set({
         masterList: {
           enabled: false,
@@ -1064,7 +1122,6 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
           path: '',
           content: '',
         },
-        morphologyResult: null,
         statsStale: true,
         statusMessage: 'Master 리스트를 닫았습니다.',
       });
@@ -1076,6 +1133,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         ? word.trim().toLowerCase()
         : word.trim();
       if (!norm) return;
+      abortAndResetAiSession();
       const existing = new Set(get().extraIgnoreWords);
       existing.add(norm);
       const sorted = Array.from(existing).sort((a, b) => a.localeCompare(b));
@@ -1090,6 +1148,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     },
 
     removeExtraIgnoreWords: async (words) => {
+      abortAndResetAiSession();
       const toRemove = new Set(words);
       const next = get().extraIgnoreWords.filter((w) => !toRemove.has(w));
       set({
@@ -1102,6 +1161,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     },
 
     clearAllExtraIgnoreWords: async () => {
+      abortAndResetAiSession();
       set({
         extraIgnoreWords: [],
         statsStale: true,
@@ -1111,8 +1171,28 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       await get().runProfileActive();
     },
 
+    replaceExtraIgnoreWords: async (words) => {
+      abortAndResetAiSession();
+      const ignoreCase = get().settings.ignoreCase;
+      const dedup = new Set<string>();
+      for (const raw of words) {
+        const cleaned = ignoreCase ? raw.trim().toLowerCase() : raw.trim();
+        if (cleaned) dedup.add(cleaned);
+      }
+      const sorted = Array.from(dedup).sort((a, b) => a.localeCompare(b));
+      set({
+        extraIgnoreWords: sorted,
+        ignoreEnabled: sorted.length > 0 ? true : get().ignoreEnabled,
+        statsStale: true,
+        statusMessage: `Extra Ignore Words ${sorted.length}개 적용됨`,
+      });
+      persistSnapshot();
+      await get().runProfileActive();
+    },
+
     pasteIntoExtraIgnoreWords: async (rawText) => {
       const st = get();
+      abortAndResetAiSession();
       const res = await profilerWorkerClient.filterPastedIgnoreWords({
         rawText,
         referenceLists: st.referenceLists,
@@ -1156,6 +1236,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         fileHistories: nextHistories,
         selectedTargetIds: [firstId],
         activeTargetFileId: firstId,
+        inlineEditorOpen: false,
         editorMode: 'profiled',
         plainFormatView: false,
         selectedWordKey: null,
@@ -1176,41 +1257,82 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     openTargetFileInProfiler: async (id) => {
       const found = get().targetFiles.find((f) => f.id === id);
       if (!found) return;
+      const wasInline = get().activeTargetFileId === null;
       abortAndResetAiSession();
       set({
         activeTargetFileId: id,
         selectedTargetIds: [id],
+        inlineEditorOpen: false,
         activeMainTab: 'profiler',
         editorMode: 'profiled',
         plainFormatView: false,
         selectedWordKey: null,
         selectedRawToken: null,
         selectedTokenSpan: null,
+        ...(wasInline ? { statsStale: true } : {}),
         ...clearAiResults(),
       });
       await get().runProfileActive();
     },
 
-    switchToInlineEditor: async (initialText) => {
-      const text = initialText !== undefined ? initialText : get().inlineText;
+    openEmptyInlineEditor: () => {
       abortAndResetAiSession();
+      profileJobEpoch += 1;
       set({
         activeTargetFileId: null,
         selectedTargetIds: [],
+        inlineEditorOpen: true,
+        inlineText: '',
+        inlineHistory: [''],
+        inlineHistoryIndex: 0,
+        editorMode: 'edit',
+        plainFormatView: false,
+        activeProfile: null,
+        isBusy: false,
+        progressPercent: 0,
+        selectedWordKey: null,
+        selectedRawToken: null,
+        selectedTokenSpan: null,
+        ...clearAiResults(),
+        statsStale: true,
+        statusMessage: '인라인 텍스트 입력 모드',
+      });
+    },
+
+    switchToInlineEditor: async (initialText, options) => {
+      const text = initialText !== undefined ? initialText : get().inlineText;
+      const desiredMode =
+        options?.mode ?? (text.trim() ? 'profiled' : 'edit');
+      abortAndResetAiSession();
+      if (desiredMode === 'edit') {
+        profileJobEpoch += 1;
+      }
+      set({
+        activeTargetFileId: null,
+        selectedTargetIds: [],
+        inlineEditorOpen: true,
         inlineText: text,
         inlineHistory: [text],
         inlineHistoryIndex: 0,
-        editorMode: text.trim() ? 'profiled' : 'edit',
+        editorMode: desiredMode,
         plainFormatView: false,
         selectedWordKey: null,
         selectedRawToken: null,
         selectedTokenSpan: null,
         ...clearAiResults(),
         statsStale: true,
+        ...(desiredMode === 'edit'
+          ? {
+              activeProfile: null,
+              isBusy: false,
+              progressPercent: 0,
+              statusMessage: '인라인 텍스트 편집 모드',
+            }
+          : {}),
       });
-      if (text.trim()) {
+      if (desiredMode === 'profiled' && text.trim()) {
         await get().runProfileActive();
-      } else {
+      } else if (desiredMode === 'profiled') {
         set({ activeProfile: null, statusMessage: '인라인 텍스트 입력 모드' });
       }
     },
@@ -1220,6 +1342,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       set({
         activeTargetFileId: null,
         selectedTargetIds: [],
+        inlineEditorOpen: true,
         inlineText: SAMPLE_ENGLISH_PASSAGE,
         inlineHistory: [SAMPLE_ENGLISH_PASSAGE],
         inlineHistoryIndex: 0,
@@ -1231,6 +1354,49 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         selectedTokenSpan: null,
         ...clearAiResults(),
         statsStale: true,
+      });
+      await get().runProfileActive();
+    },
+
+    closeTargetFileById: async (id) => {
+      const {
+        targetFiles,
+        activeTargetFileId,
+        fileHistories,
+        selectedTargetIds,
+      } = get();
+      const target = targetFiles.find((f) => f.id === id);
+      if (!target) return;
+
+      const remaining = targetFiles.filter((f) => f.id !== id);
+      const nextHistories = { ...fileHistories };
+      delete nextHistories[id];
+      const nextSelected = selectedTargetIds.filter((x) => x !== id);
+
+      if (activeTargetFileId !== id) {
+        set({
+          targetFiles: remaining,
+          fileHistories: nextHistories,
+          selectedTargetIds: nextSelected,
+          statsStale: true,
+          statusMessage: `'${target.name}' 파일을 닫았습니다.`,
+        });
+        return;
+      }
+
+      abortAndResetAiSession();
+      const nextActiveId = remaining[0]?.id ?? null;
+      set({
+        targetFiles: remaining,
+        fileHistories: nextHistories,
+        selectedTargetIds: nextActiveId ? [nextActiveId] : [],
+        activeTargetFileId: nextActiveId,
+        selectedWordKey: null,
+        selectedRawToken: null,
+        selectedTokenSpan: null,
+        ...clearAiResults(),
+        statsStale: true,
+        statusMessage: `'${target.name}' 파일을 닫았습니다.`,
       });
       await get().runProfileActive();
     },
@@ -1329,6 +1495,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       const st = get();
       if (st.activeTargetFileId === null) {
         if (st.inlineHistoryIndex <= 0) return;
+        abortAndResetAiSession();
         const nextIdx = st.inlineHistoryIndex - 1;
         set({
           inlineHistoryIndex: nextIdx,
@@ -1347,6 +1514,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       const fileId = st.activeTargetFileId;
       const h = st.fileHistories[fileId];
       if (!h || h.index <= 0) return;
+      abortAndResetAiSession();
       const nextIdx = h.index - 1;
       const restored = h.stack[nextIdx];
       set({
@@ -1371,6 +1539,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       const st = get();
       if (st.activeTargetFileId === null) {
         if (st.inlineHistoryIndex >= st.inlineHistory.length - 1) return;
+        abortAndResetAiSession();
         const nextIdx = st.inlineHistoryIndex + 1;
         set({
           inlineHistoryIndex: nextIdx,
@@ -1389,6 +1558,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       const fileId = st.activeTargetFileId;
       const h = st.fileHistories[fileId];
       if (!h || h.index >= h.stack.length - 1) return;
+      abortAndResetAiSession();
       const nextIdx = h.index + 1;
       const restored = h.stack[nextIdx];
       set({
@@ -1414,16 +1584,13 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       if (!profile) return;
 
       const suggestion = get().combinedSuggestionResult;
-      if (
-        suggestion &&
-        !assertProfileStillCurrent(
-          suggestion.sourceOriginalText,
-          suggestion.sourceId,
-        )
-      ) {
+      const expectedText = suggestion?.sourceOriginalText ?? profile.originalText;
+      const expectedSourceId = suggestion?.sourceId ?? profile.sourceId;
+      if (!assertProfileStillCurrent(expectedText, expectedSourceId)) {
+        abortAiAndClearLoading();
         set({
           aiError:
-            '문서가 변경되어 추천 결과를 적용할 수 없습니다. 다시 추천을 받아 주세요.',
+            '문서가 변경되어 교체를 적용할 수 없습니다. 다시 프로파일링(F5)하거나 추천을 받아 주세요.',
           aiSuggestionModalOpen: false,
           combinedSuggestionResult: null,
         });
@@ -1459,16 +1626,13 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       if (!profile || !lookupKey) return 0;
 
       const suggestion = get().combinedSuggestionResult;
-      if (
-        suggestion &&
-        !assertProfileStillCurrent(
-          suggestion.sourceOriginalText,
-          suggestion.sourceId,
-        )
-      ) {
+      const expectedText = suggestion?.sourceOriginalText ?? profile.originalText;
+      const expectedSourceId = suggestion?.sourceId ?? profile.sourceId;
+      if (!assertProfileStillCurrent(expectedText, expectedSourceId)) {
+        abortAiAndClearLoading();
         set({
           aiError:
-            '문서가 변경되어 추천 결과를 적용할 수 없습니다. 다시 추천을 받아 주세요.',
+            '문서가 변경되어 교체를 적용할 수 없습니다. 다시 프로파일링(F5)하거나 추천을 받아 주세요.',
           aiSuggestionModalOpen: false,
           combinedSuggestionResult: null,
         });
@@ -1481,7 +1645,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         if (tok.lookupKey === lookupKey) {
           count += 1;
           nextDocText +=
-            matchSurfaceCapitalization(tok.token, replacementText) +
+            sanitizeSingleTokenReplacement(tok.token, replacementText) +
             tok.trailingWs;
         } else {
           nextDocText += tok.token + tok.trailingWs;
@@ -1508,10 +1672,13 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     },
 
     setEditorMode: (mode) => {
-      set({ editorMode: mode });
-      if (mode === 'profiled') {
-        void get().runProfileActive();
+      if (mode === 'edit') {
+        profileJobEpoch += 1;
+        set({ editorMode: 'edit', isBusy: false });
+        return;
       }
+      set({ editorMode: 'profiled' });
+      void get().runProfileActive();
     },
 
     clearProfileFormat: () => {
@@ -1611,13 +1778,14 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       });
 
       try {
+        const isViewingInline =
+          st.activeTargetFileId === null && st.inlineText.trim().length > 0;
         const bundle = await profilerWorkerClient.computeAllStats(
           {
-            targetFiles: st.targetFiles,
-            inlineDraft:
-              st.targetFiles.length === 0
-                ? { name: 'Inline_Text.txt', content: st.inlineText }
-                : null,
+            targetFiles: isViewingInline ? [] : st.targetFiles,
+            inlineDraft: isViewingInline
+              ? { name: 'Inline_Text.txt', content: st.inlineText }
+              : null,
             referenceLists: st.referenceLists,
             ignoreList: st.ignoreList,
             extraIgnoreWords: st.extraIgnoreWords,
@@ -1824,14 +1992,30 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     updateSettings: async (patch) => {
       const prev = get().settings;
       const next = { ...prev, ...patch };
-      set({ settings: next, statsStale: true });
-      persistSnapshot();
-
       const affectsLexiconOrTokens =
         patch.tokenDefinition !== undefined ||
         patch.ignoreCase !== undefined ||
         patch.nationFormat !== undefined ||
         patch.stripCurriculumAnnotations !== undefined;
+      const affectsTokens =
+        patch.tokenDefinition !== undefined || patch.ignoreCase !== undefined;
+
+      if (affectsLexiconOrTokens) {
+        abortAndResetAiSession();
+      }
+
+      set({
+        settings: next,
+        statsStale: true,
+        ...(affectsTokens
+          ? {
+              selectedWordKey: null,
+              selectedRawToken: null,
+              selectedTokenSpan: null,
+            }
+          : {}),
+      });
+      persistSnapshot();
 
       if (affectsLexiconOrTokens) {
         await get().runProfileActive();
@@ -1846,12 +2030,19 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     },
 
     resetDefaultSettings: async () => {
-      set({ settings: { ...DEFAULT_SETTINGS }, statsStale: true });
+      abortAndResetAiSession();
+      set({
+        settings: { ...DEFAULT_SETTINGS },
+        selectedWordKey: null,
+        selectedRawToken: null,
+        selectedTokenSpan: null,
+        statsStale: true,
+      });
       persistSnapshot();
       await get().runProfileActive();
     },
 
-    AdjustFontSize: (delta) => {
+    adjustFontSize: (delta) => {
       const cur = get().settings.fontSizePx;
       const next = Math.min(32, Math.max(14, cur + delta));
       set((st) => ({ settings: { ...st.settings, fontSizePx: next } }));
@@ -1932,7 +2123,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       abortAiAndClearLoading();
     },
 
-    openAiSuggestionModal: async () => {
+    openAiSuggestionModal: async (options) => {
       const st = get();
       if (!st.activeProfile || !st.selectedTokenSpan) {
         set({
@@ -1958,11 +2149,41 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       }
 
       cancelActiveAiCall();
+
+      const profile = st.activeProfile;
+      const span = st.selectedTokenSpan;
+      const sourceOriginalText = profile.originalText;
+      const sourceId = profile.sourceId;
+
+      const verifierCtx = getVerifierContext({
+        referenceLists: st.referenceLists,
+        ignoreList: st.ignoreList,
+        extraIgnoreWords: st.extraIgnoreWords,
+        masterList: st.masterList,
+        ignoreEnabled: st.ignoreEnabled,
+        settings: st.settings,
+        includeExtendedMetadata: false,
+      });
+
+      const textSig = `${sourceOriginalText.length}:${sourceOriginalText.slice(0, 64)}:${sourceOriginalText.slice(-64)}`;
+      const cacheKey = `${sourceId}|${textSig}|${span.startTokenIdx}:${span.endTokenIdx}|${st.openRouterConfig.modelId}|${verifierCtx.cacheKey}`;
+
+      if (options?.forceRefresh !== true) {
+        const cached = aiSuggestionCache.get(cacheKey);
+        if (cached) {
+          set({
+            aiSuggestionModalOpen: true,
+            inspectorTab: 'ai',
+            aiLoading: false,
+            aiError: null,
+            combinedSuggestionResult: cached,
+          });
+          return;
+        }
+      }
+
       const controller = new AbortController();
       activeAiAbortController = controller;
-
-      const sourceOriginalText = st.activeProfile.originalText;
-      const sourceId = st.activeProfile.sourceId;
 
       set({
         aiSuggestionModalOpen: true,
@@ -1973,51 +2194,13 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       });
 
       try {
-        const builtinMaster = await ensureBuiltinMasterRaw();
-        if (controller.signal.aborted) return;
-
-        const latest = get();
-        const profile = latest.activeProfile;
-        const span = latest.selectedTokenSpan;
-        if (
-          !profile ||
-          !span ||
-          profile.sourceId !== sourceId ||
-          profile.originalText !== sourceOriginalText
-        ) {
-          set({
-            aiLoading: false,
-            aiError:
-              '문서가 변경되어 추천을 시작할 수 없습니다. 단어를 다시 선택한 뒤 추천해 주세요.',
-          });
-          return;
-        }
-        if (latest.referenceLists.filter((r) => r.enabled).length === 0) {
-          set({
-            aiLoading: false,
-            aiError:
-              '활성 Reference List가 없습니다. 왼쪽에서 단어장을 추가하거나 활성화한 뒤 다시 시도해 주세요.',
-          });
-          return;
-        }
-
-        const verifierCtx = getVerifierContext({
-          referenceLists: latest.referenceLists,
-          ignoreList: latest.ignoreList,
-          extraIgnoreWords: latest.extraIgnoreWords,
-          masterList: latest.masterList,
-          builtinMasterRawContent: builtinMaster,
-          ignoreEnabled: latest.ignoreEnabled,
-          settings: latest.settings,
-        });
-
         const res = await suggestReplacementsAndParaphrases({
           profile,
           spanStartIdx: span.startTokenIdx,
           spanEndIdx: span.endTokenIdx,
-          targetMaxLevel: activeReferenceLevelCap(latest.referenceLists),
+          targetMaxLevel: activeReferenceLevelCap(st.referenceLists),
           verifierCtx,
-          config: latest.openRouterConfig,
+          config: st.openRouterConfig,
           signal: controller.signal,
         });
 
@@ -2033,6 +2216,17 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
           });
           return;
         }
+
+        if (aiSuggestionCache.has(cacheKey)) {
+          aiSuggestionCache.delete(cacheKey);
+        } else if (aiSuggestionCache.size >= MAX_AI_SUGGESTION_CACHE) {
+          const oldestKey = aiSuggestionCache.keys().next().value;
+          if (oldestKey !== undefined) {
+            aiSuggestionCache.delete(oldestKey);
+          }
+        }
+        aiSuggestionCache.set(cacheKey, res);
+
         set({ combinedSuggestionResult: res, aiLoading: false });
       } catch (err) {
         if (controller.signal.aborted) return;

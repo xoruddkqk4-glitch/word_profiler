@@ -5,6 +5,7 @@ import {
   buildReplacedDocumentText,
   buildSentencePreviewForSpan,
   getVerifierContext,
+  sanitizeSingleTokenReplacement,
 } from './lexiconVerifier';
 
 function tok(
@@ -106,6 +107,45 @@ describe('buildReplacedDocumentText', () => {
 
     const next = buildReplacedDocumentText(profile, 0, 1, 'It is fine.');
     expect(next).toBe('It is fine.');
+  });
+
+  it('preserves closing quotation marks when replacement ends with period only', () => {
+    const profile: DocumentProfileResult = {
+      ...makeProfile([
+        tok({ token: 'This', trailingWs: ' ', lookupKey: 'this' }, 0),
+        tok({ token: 'is', trailingWs: ' ', lookupKey: 'is' }, 1),
+        tok({ token: 'esoteric', trailingWs: '." ', lookupKey: 'esoteric' }, 2),
+        tok({ token: 'He', trailingWs: ' ', lookupKey: 'he' }, 3),
+        tok({ token: 'smiled', trailingWs: '.', lookupKey: 'smiled' }, 4),
+      ]),
+      leadingWs: '"',
+      originalText: '"This is esoteric." He smiled.',
+    };
+
+    const next = buildReplacedDocumentText(
+      profile,
+      0,
+      2,
+      'This is hard to understand.',
+    );
+    expect(next).toBe('"This is hard to understand." He smiled.');
+
+    const withQuote = buildReplacedDocumentText(
+      profile,
+      0,
+      2,
+      'This is hard to understand."',
+    );
+    expect(withQuote).toBe('"This is hard to understand." He smiled.');
+  });
+});
+
+describe('sanitizeSingleTokenReplacement', () => {
+  it('strips wrapping quotes and terminal punctuation and matches capitalization', () => {
+    expect(sanitizeSingleTokenReplacement('Esoteric', '"simple."')).toBe(
+      'Simple',
+    );
+    expect(sanitizeSingleTokenReplacement('FAST', 'quick!')).toBe('QUICK');
   });
 });
 

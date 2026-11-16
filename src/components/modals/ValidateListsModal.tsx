@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, Copy, X } from 'lucide-react';
+import { copyTextSafe } from '../../io/docExporters';
 import { useProfilerStore } from '../../store/useProfilerStore';
 import { VirtualStatsTable } from '../stats/VirtualStatsTable';
 
@@ -147,7 +148,7 @@ export const ValidateListsModal: React.FC = () => {
                   'ID\tEntry\tHeadword(s)\tLevel Lists',
                   ...rows.map((r) => r.join('\t')),
                 ].join('\n');
-                void navigator.clipboard.writeText(tsv);
+                void copyTextSafe(tsv);
               }}
             >
               <Copy size={15} /> Copy Duplicates (.tsv)

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Copy, Plus, ShieldOff, Sparkles, Trash2 } from 'lucide-react';
+import { copyTextSafe } from '../../io/docExporters';
 import { useProfilerStore } from '../../store/useProfilerStore';
 import { AiLexicalPanel } from './AiLexicalPanel';
 
@@ -161,9 +162,7 @@ export const SelectionInspector: React.FC = () => {
               title="Extra Ignore 전체 목록 복사"
               aria-label="전체 복사"
               onClick={() =>
-                void navigator.clipboard.writeText(
-                  store.extraIgnoreWords.join('\n'),
-                )
+                void copyTextSafe(store.extraIgnoreWords.join('\n'))
               }
             >
               <Copy size={15} />

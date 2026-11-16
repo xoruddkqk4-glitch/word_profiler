@@ -8,6 +8,7 @@ import {
   Wand2,
 } from 'lucide-react';
 import { resolveTokenHighlight } from '../../core/colorPalette';
+import { copyTextSafe } from '../../io/docExporters';
 import { useProfilerStore } from '../../store/useProfilerStore';
 import type { ProfileToken } from '../../types/domain';
 
@@ -16,6 +17,7 @@ interface ContextMenuState {
   y: number;
   token: ProfileToken;
   tokenIdx: number;
+  phraseText: string | null;
 }
 
 export const HighlightedTextView: React.FC = () => {
@@ -106,12 +108,59 @@ export const HighlightedTextView: React.FC = () => {
   const span = store.selectedTokenSpan;
   const isMultiSpan = Boolean(span && span.endTokenIdx > span.startTokenIdx);
 
+  const findTokenIndexFromTarget = (target: EventTarget | null): number | null => {
+    const el = (target as HTMLElement | null)?.closest?.(
+      '[data-tok-idx]',
+    ) as HTMLElement | null;
+    if (!el) return null;
+    const idx = Number(el.dataset.tokIdx);
+    return Number.isInteger(idx) && idx >= 0 && idx < profile.tokens.length
+      ? idx
+      : null;
+  };
+
+  const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) {
+      return;
+    }
+    const idx = findTokenIndexFromTarget(e.target);
+    if (idx !== null) {
+      store.selectTokenInstance(idx);
+    }
+  };
+
+  const handleContainerContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    const idx = findTokenIndexFromTarget(e.target);
+    if (idx === null) return;
+    e.preventDefault();
+    const tok = profile.tokens[idx];
+    const inMultiPhrase = Boolean(
+      span &&
+        span.endTokenIdx > span.startTokenIdx &&
+        idx >= span.startTokenIdx &&
+        idx <= span.endTokenIdx,
+    );
+    if (!inMultiPhrase) {
+      store.selectTokenInstance(idx);
+    }
+    setCtxMenu({
+      x: Math.min(e.clientX, window.innerWidth - 296),
+      y: Math.min(e.clientY, window.innerHeight - 280),
+      token: tok,
+      tokenIdx: idx,
+      phraseText: inMultiPhrase && span ? span.rawText : null,
+    });
+  };
+
   return (
     <div
       ref={containerRef}
       className="profiled-reader-scroll"
       style={{ fontSize: `${store.settings.fontSizePx}px` }}
       onMouseUp={handleMouseUpSelection}
+      onClick={handleContainerClick}
+      onContextMenu={handleContainerContextMenu}
     >
       <div className="profiled-prose-measure">
         {profile.leadingWs}
@@ -160,17 +209,6 @@ export const HighlightedTextView: React.FC = () => {
                     ? { color: hl.color, fontWeight: 500 }
                     : undefined
                 }
-                onClick={() => store.selectTokenInstance(i)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  store.selectTokenInstance(i);
-                  setCtxMenu({
-                    x: Math.min(e.clientX, window.innerWidth - 296),
-                    y: Math.min(e.clientY, window.innerHeight - 280),
-                    token: tok,
-                    tokenIdx: i,
-                  });
-                }}
               >
                 {tok.token}
               </span>
@@ -188,12 +226,20 @@ export const HighlightedTextView: React.FC = () => {
             style={{ top: ctxMenu.y, left: ctxMenu.x }}
           >
             <div className="menu-section-caption">
-              &ldquo;{ctxMenu.token.token}&rdquo; —{' '}
-              {ctxMenu.token.kind === 'level'
-                ? `Level ${ctxMenu.token.statLevelNumber} (${ctxMenu.token.listName})`
-                : ctxMenu.token.kind === 'ignored'
-                  ? 'Ignored'
-                  : 'Out of lists'}
+              {ctxMenu.phraseText ? (
+                <>
+                  &ldquo;{ctxMenu.phraseText}&rdquo; — 선택 구문
+                </>
+              ) : (
+                <>
+                  &ldquo;{ctxMenu.token.token}&rdquo; —{' '}
+                  {ctxMenu.token.kind === 'level'
+                    ? `Level ${ctxMenu.token.statLevelNumber} (${ctxMenu.token.listName})`
+                    : ctxMenu.token.kind === 'ignored'
+                      ? 'Ignored'
+                      : 'Out of lists'}
+                </>
+              )}
             </div>
 
             <button
@@ -201,38 +247,46 @@ export const HighlightedTextView: React.FC = () => {
               className="menu-item"
               onClick={() => {
                 const idx = ctxMenu.tokenIdx;
+                const keepPhrase = Boolean(ctxMenu.phraseText);
                 setCtxMenu(null);
-                store.selectTokenInstance(idx);
+                if (!keepPhrase) {
+                  store.selectTokenInstance(idx);
+                }
                 store.setInspectorTab('ai');
                 void store.openAiSuggestionModal();
               }}
             >
               <span className="menu-item-left">
-                <Wand2 size={15} /> AI 추천 (단어 3 + 문장 3)
+                <Wand2 size={15} />{' '}
+                {ctxMenu.phraseText
+                  ? '선택 표현 AI 추천 (단어 3 + 문장 3)'
+                  : 'AI 추천 (단어 3 + 문장 3)'}
               </span>
             </button>
 
-            <button
-              type="button"
-              className="menu-item"
-              onClick={() => {
-                const idx = ctxMenu.tokenIdx;
-                setCtxMenu(null);
-                store.selectTokenInstance(idx);
-                store.setInspectorTab('ai');
-                if (store.openRouterConfig.apiKey.trim()) {
-                  void store.runAiMorphologyCheck();
-                }
-              }}
-            >
-              <span className="menu-item-left">
-                <GitBranch size={15} /> AI: 기본형·어근 및 리스트 확인
-              </span>
-            </button>
+            {!ctxMenu.phraseText && (
+              <button
+                type="button"
+                className="menu-item"
+                onClick={() => {
+                  const idx = ctxMenu.tokenIdx;
+                  setCtxMenu(null);
+                  store.selectTokenInstance(idx);
+                  store.setInspectorTab('ai');
+                  if (store.openRouterConfig.apiKey.trim()) {
+                    void store.runAiMorphologyCheck();
+                  }
+                }}
+              >
+                <span className="menu-item-left">
+                  <GitBranch size={15} /> AI: 기본형·어근 및 리스트 확인
+                </span>
+              </button>
+            )}
 
             <div className="menu-divider" />
 
-            {ctxMenu.token.kind === 'out' && (
+            {!ctxMenu.phraseText && ctxMenu.token.kind === 'out' && (
               <button
                 type="button"
                 className="menu-item"
@@ -249,7 +303,8 @@ export const HighlightedTextView: React.FC = () => {
               </button>
             )}
 
-            {ctxMenu.token.kind === 'ignored' &&
+            {!ctxMenu.phraseText &&
+              ctxMenu.token.kind === 'ignored' &&
               store.extraIgnoreWords.includes(ctxMenu.token.lookupKey) && (
                 <button
                   type="button"
@@ -271,12 +326,13 @@ export const HighlightedTextView: React.FC = () => {
               type="button"
               className="menu-item"
               onClick={() => {
-                void navigator.clipboard.writeText(ctxMenu.token.token);
+                const textToCopy = ctxMenu.phraseText ?? ctxMenu.token.token;
                 setCtxMenu(null);
+                void copyTextSafe(textToCopy);
               }}
             >
               <span className="menu-item-left">
-                <Copy size={15} /> Copy Word
+                <Copy size={15} /> {ctxMenu.phraseText ? 'Copy Selection' : 'Copy Word'}
               </span>
             </button>
           </div>,

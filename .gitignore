@@ -5,5 +5,6 @@ dist/
 *.tsbuildinfo
 .reference/
 .plan/
+.agents/
 .DS_Store
 Thumbs.db

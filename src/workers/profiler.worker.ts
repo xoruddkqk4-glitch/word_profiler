@@ -10,9 +10,15 @@ import {
   exportCompiledLevelGroups,
   type CompiledLexicon,
 } from '../core/wordlistParser';
+import type {
+  AuxiliaryListState,
+  ProfilerSettings,
+  ReferenceListSource,
+} from '../types/domain';
 import type { WorkerRequest, WorkerResponse } from '../types/workerMessages';
 
 let cachedLexicon: CompiledLexicon | null = null;
+let cachedRefOnlyLexicon: CompiledLexicon | null = null;
 
 function getOrCompileLexicon(
   req: Extract<
@@ -42,6 +48,41 @@ function getOrCompileLexicon(
     settings: req.settings,
   });
   return cachedLexicon;
+}
+
+function getOrCompileRefOnlyLexicon(
+  referenceLists: ReferenceListSource[],
+  masterList: AuxiliaryListState,
+  settings: ProfilerSettings,
+): CompiledLexicon {
+  const emptyIgnore: AuxiliaryListState = {
+    enabled: false,
+    name: '',
+    path: '',
+    content: '',
+  };
+  const key = computeLexiconCacheKey({
+    referenceLists,
+    ignoreList: emptyIgnore,
+    extraIgnoreWords: [],
+    masterList,
+    ignoreEnabled: false,
+    settings,
+  });
+
+  if (cachedRefOnlyLexicon && cachedRefOnlyLexicon.cacheKey === key) {
+    return cachedRefOnlyLexicon;
+  }
+
+  cachedRefOnlyLexicon = compileLexicon({
+    referenceLists,
+    ignoreList: emptyIgnore,
+    extraIgnoreWords: [],
+    masterList,
+    ignoreEnabled: false,
+    settings,
+  });
+  return cachedRefOnlyLexicon;
 }
 
 function send(msg: WorkerResponse): void {
@@ -142,10 +183,16 @@ self.onmessage = (ev: MessageEvent<WorkerRequest>) => {
 
       case 'VALIDATE_LISTS': {
         const t0 = performance.now();
+        const compiledLexicon = getOrCompileRefOnlyLexicon(
+          req.referenceLists,
+          req.masterList,
+          req.settings,
+        );
         const duplicates = validateReferenceLists({
           referenceLists: req.referenceLists,
           masterList: req.masterList,
           settings: req.settings,
+          compiledLexicon,
         });
         send({
           type: 'VALIDATE_LISTS_RESULT',
@@ -157,14 +204,11 @@ self.onmessage = (ev: MessageEvent<WorkerRequest>) => {
       }
 
       case 'FILTER_PASTED_IGNORE_WORDS': {
-        const lexicon = compileLexicon({
-          referenceLists: req.referenceLists,
-          ignoreList: { enabled: false, name: '', path: '', content: '' },
-          extraIgnoreWords: [],
-          masterList: req.masterList,
-          ignoreEnabled: false,
-          settings: req.settings,
-        });
+        const lexicon = getOrCompileRefOnlyLexicon(
+          req.referenceLists,
+          req.masterList,
+          req.settings,
+        );
         const allTokens = extractUniqueTokensFromText(
           req.rawText,
           req.settings.tokenDefinition,
@@ -189,14 +233,11 @@ self.onmessage = (ev: MessageEvent<WorkerRequest>) => {
       }
 
       case 'EXPORT_LEVEL_GROUPS': {
-        const lexicon = compileLexicon({
-          referenceLists: req.referenceLists,
-          ignoreList: { enabled: false, name: '', path: '', content: '' },
-          extraIgnoreWords: [],
-          masterList: req.masterList,
-          ignoreEnabled: false,
-          settings: req.settings,
-        });
+        const lexicon = getOrCompileRefOnlyLexicon(
+          req.referenceLists,
+          req.masterList,
+          req.settings,
+        );
         const groups = exportCompiledLevelGroups(lexicon);
         send({
           type: 'EXPORT_LEVEL_GROUPS_RESULT',

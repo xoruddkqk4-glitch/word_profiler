@@ -44,6 +44,98 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
 }
 
+function parseHexRgb(hex: string): [number, number, number] | null {
+  const clean = hex.trim().replace(/^#/, '');
+  const full =
+    clean.length === 3
+      ? clean
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : clean;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return null;
+  return [
+    parseInt(full.slice(0, 2), 16),
+    parseInt(full.slice(2, 4), 16),
+    parseInt(full.slice(4, 6), 16),
+  ];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const toHex = (n: number) =>
+    Math.min(255, Math.max(0, Math.round(n)))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, Math.round(l * 100)];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  if (max === rn) h = (gn - bn) / d + (gn < bn ? 6 : 0);
+  else if (max === gn) h = (bn - rn) / d + 2;
+  else h = (rn - gn) / d + 4;
+  return [Math.round(h * 60), Math.round(s * 100), Math.round(l * 100)];
+}
+
+function relativeLuminance(r: number, g: number, b: number): number {
+  const lin = [r, g, b].map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+}
+
+/**
+ * Ensures a color has >= 4.5:1 contrast on white (#ffffff) for light mode and
+ * Word/HTML exports by reducing HSL lightness while preserving hue.
+ */
+export function ensureReadableOnLight(hex: string): string {
+  const rgb = parseHexRgb(hex);
+  if (!rgb) return hex;
+  if (relativeLuminance(...rgb) <= 0.18) {
+    return rgbToHex(...rgb);
+  }
+  const [h, s, initialL] = rgbToHsl(...rgb);
+  for (let l = Math.min(initialL, 55); l >= 12; l -= 2) {
+    const candidate = hslToHex(h, s, l);
+    const cRgb = parseHexRgb(candidate)!;
+    if (relativeLuminance(...cRgb) <= 0.175) {
+      return candidate;
+    }
+  }
+  return hslToHex(h, s, 24);
+}
+
+/**
+ * Ensures a color has readable contrast against dark surfaces by raising HSL
+ * lightness when a dark-theme or light-mode swatch is too dim for dark mode.
+ */
+export function ensureReadableOnDark(hex: string): string {
+  const rgb = parseHexRgb(hex);
+  if (!rgb) return hex;
+  if (relativeLuminance(...rgb) >= 0.34) {
+    return rgbToHex(...rgb);
+  }
+  const [h, s, initialL] = rgbToHsl(...rgb);
+  for (let l = Math.max(initialL, 58); l <= 88; l += 2) {
+    const candidate = hslToHex(h, s, l);
+    const cRgb = parseHexRgb(candidate)!;
+    if (relativeLuminance(...cRgb) >= 0.35) {
+      return candidate;
+    }
+  }
+  return hslToHex(h, s, 74);
+}
+
 export function getDefaultLevelColorPair(index: number): LevelColorPair {
   if (index < PRESET_LEVEL_COLORS.length) {
     return PRESET_LEVEL_COLORS[index];

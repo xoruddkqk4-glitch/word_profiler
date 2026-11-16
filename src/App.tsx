@@ -11,6 +11,7 @@ import { ValidateListsModal } from './components/modals/ValidateListsModal';
 import { FileProfilerPane } from './components/profiler/FileProfilerPane';
 import { StatsViewerPane } from './components/stats/StatsViewerPane';
 import {
+  formatFileReadErrors,
   readTargetFilesFromBrowser,
   readWordlistFilesFromBrowser,
 } from './io/fileReaders';
@@ -29,7 +30,7 @@ export const App: React.FC = () => {
     void store.initializeApp();
   }, [store]);
 
-  // Global keyboard shortcuts (F5 refresh, Ctrl+F search focus, Ctrl+O open target files)
+  // Global keyboard shortcuts (F5 refresh, Ctrl+F search focus, Ctrl+O open target files, Ctrl+Z/Y undo/redo)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F5') {
@@ -47,6 +48,41 @@ export const App: React.FC = () => {
           e.preventDefault();
           searchInputRef.current?.focus();
           searchInputRef.current?.select();
+        }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        const key = e.key.toLowerCase();
+        if (key !== 'z' && key !== 'y') return;
+        const target = e.target as HTMLElement | null;
+        const isEditable = Boolean(
+          target &&
+            (target.tagName === 'INPUT' ||
+              target.tagName === 'TEXTAREA' ||
+              target.tagName === 'SELECT' ||
+              target.isContentEditable),
+        );
+        if (isEditable) return;
+
+        const st = useProfilerStore.getState();
+        const modalOpen = Boolean(
+          st.settingsModalOpen ||
+            st.helpModalTab ||
+            st.coverageModal ||
+            st.validationModal ||
+            st.aiSuggestionModalOpen,
+        );
+        if (modalOpen || st.activeMainTab !== 'profiler') return;
+
+        if (key === 'z' && !e.shiftKey && st.canUndoActiveDocument()) {
+          e.preventDefault();
+          st.undoInlineText();
+        } else if (
+          (key === 'y' || (key === 'z' && e.shiftKey)) &&
+          st.canRedoActiveDocument()
+        ) {
+          e.preventDefault();
+          st.redoInlineText();
         }
       }
     };
@@ -100,18 +136,19 @@ export const App: React.FC = () => {
 
     if (kind === 'wordlist') {
       const { lists, errors } = await readWordlistFilesFromBrowser(files);
-      if (errors.length > 0) {
-        store.setErrorBanner(`${errors[0].fileName}: ${errors[0].reason}`);
-      }
+      const readErr = formatFileReadErrors(errors);
       if (lists.length > 0) {
-        await store.addCustomReferenceLists(lists);
+        await store.addCustomReferenceLists(lists, readErr);
+      } else if (readErr) {
+        store.setErrorBanner(readErr);
       }
       return;
     }
 
     const { items, errors } = await readTargetFilesFromBrowser(files);
-    if (errors.length > 0) {
-      store.setErrorBanner(`${errors[0].fileName}: ${errors[0].reason}`);
+    const readErr = formatFileReadErrors(errors);
+    if (readErr) {
+      store.setErrorBanner(readErr);
     }
     if (items.length > 0) {
       await store.addTargetFiles(items);
@@ -139,8 +176,9 @@ export const App: React.FC = () => {
           e.target.value = '';
           if (!files?.length) return;
           const { items, errors } = await readTargetFilesFromBrowser(files);
-          if (errors.length > 0) {
-            store.setErrorBanner(`${errors[0].fileName}: ${errors[0].reason}`);
+          const readErr = formatFileReadErrors(errors);
+          if (readErr) {
+            store.setErrorBanner(readErr);
           }
           if (items.length > 0) {
             await store.addTargetFiles(items);

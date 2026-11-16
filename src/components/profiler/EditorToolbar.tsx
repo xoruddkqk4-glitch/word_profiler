@@ -17,10 +17,14 @@ import {
   Undo2,
 } from 'lucide-react';
 import {
+  copyTextSafe,
   exportProfileAsDocx,
   exportProfileAsTxt,
 } from '../../io/docExporters';
-import { readTargetFilesFromBrowser } from '../../io/fileReaders';
+import {
+  formatFileReadErrors,
+  readTargetFilesFromBrowser,
+} from '../../io/fileReaders';
 import { useProfilerStore } from '../../store/useProfilerStore';
 
 export interface EditorToolbarProps {
@@ -56,8 +60,15 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
         setFileMenuOpen(false);
       }
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFileMenuOpen(false);
+    };
     window.addEventListener('mousedown', onPointerDown);
-    return () => window.removeEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKey);
+    };
   }, [fileMenuOpen]);
 
   const handlePasteClipboard = async () => {
@@ -148,10 +159,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                     className="mini-icon-btn"
                     title={`${file.name} 닫기`}
                     aria-label={`${file.name} 닫기`}
-                    onClick={() => {
-                      store.setSelectedTargetIds([file.id]);
-                      void store.removeSelectedTargetFiles();
-                    }}
+                    onClick={() => void store.closeTargetFileById(file.id)}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -251,9 +259,9 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
             className="btn btn-sm"
             title="현재 파일 내용을 인라인 편집기로 복사하여 어휘를 직접 수정합니다"
             onClick={() => {
-              const txt = store.activeProfile?.originalText ?? '';
-              void store.switchToInlineEditor(txt);
-              store.setEditorMode('edit');
+              const txt =
+                activeFile?.content ?? store.activeProfile?.originalText ?? '';
+              void store.switchToInlineEditor(txt, { mode: 'edit' });
             }}
           >
             <Edit3 size={15} /> Edit Copy
@@ -266,7 +274,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           type="button"
           className="btn btn-icon btn-sm"
           disabled={!canUndo}
-          title="실행 취소 (인라인 편집)"
+          title="실행 취소 (Ctrl+Z)"
           aria-label="실행 취소"
           onClick={store.undoInlineText}
         >
@@ -276,7 +284,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           type="button"
           className="btn btn-icon btn-sm"
           disabled={!canRedo}
-          title="다시 실행 (인라인 편집)"
+          title="다시 실행 (Ctrl+Y)"
           aria-label="다시 실행"
           onClick={store.redoInlineText}
         >
@@ -291,7 +299,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           aria-label="전체 본문 복사"
           onClick={() => {
             const txt = store.activeProfile?.originalText ?? store.inlineText;
-            if (txt) void navigator.clipboard.writeText(txt);
+            if (txt) void copyTextSafe(txt);
           }}
         >
           <Copy size={15} />
@@ -313,7 +321,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="btn btn-icon btn-sm"
           title="글꼴 크기 축소"
           aria-label="글꼴 크기 축소"
-          onClick={() => store.AdjustFontSize(-1)}
+          onClick={() => store.adjustFontSize(-1)}
         >
           <Minus size={15} />
         </button>
@@ -325,7 +333,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="btn btn-icon btn-sm"
           title="글꼴 크기 확대"
           aria-label="글꼴 크기 확대"
-          onClick={() => store.AdjustFontSize(1)}
+          onClick={() => store.adjustFontSize(1)}
         >
           <Plus size={15} />
         </button>
@@ -388,8 +396,9 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           e.target.value = '';
           if (!files?.length) return;
           const { items, errors } = await readTargetFilesFromBrowser(files);
-          if (errors.length > 0) {
-            store.setErrorBanner(`${errors[0].fileName}: ${errors[0].reason}`);
+          const readErr = formatFileReadErrors(errors);
+          if (readErr) {
+            store.setErrorBanner(readErr);
           }
           if (items.length > 0) {
             await store.addTargetFiles(items);
