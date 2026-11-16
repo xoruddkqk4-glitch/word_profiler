@@ -48,6 +48,7 @@
 ## 기술 스택 및 디렉터리 구조
 
 - **프레임워크 / 언어 / 테스트**: Vite 6, React 19, TypeScript 5.8, Zustand 5, Vitest 3
+- **데스크톱 패키징 (Windows `.exe`)**: Electron, `electron-builder` (`asar` 아카이브 및 단일 파일 Portable `.exe` 지원)
 - **스타일링**: Tailwind CSS v4 (`@tailwindcss/vite`), OKLCH CSS Custom Properties (`src/styles/tokens.css`, `src/styles/workspace.css`)
 - **문서 입출력**: `mammoth` (`.docx` 읽기), `pdfjs-dist` (`.pdf` 읽기), `docx` (컬러 `.docx` 생성), `xlsx` (다중 시트 `.xlsx` 생성), `jszip` (단어장 아카이브)
 - **구조**:
@@ -56,7 +57,9 @@
   - `src/workers/`: 메인 스레드 블로킹 방지를 위한 Web Worker 파이프라인
   - `src/io/`: 브라우저 로컬 파일 리더 및 `.docx`/`.html`/`.txt`/`.tsv`/`.xlsx`/`.ini` 익스포터
   - `src/components/`: `layout/`, `profiler/`, `stats/`, `modals/` 3패널 워크벤치 UI
+  - `electron/main.cjs` & `electron-builder.json`: 커스텀 보안 스킴(`app://antwordprofiler`) 기반 Windows 데스크톱 `.exe` 런타임 및 패키징 설정
   - `start.bat`: Windows 환경 원클릭 로컬 서버 기동 및 브라우저 자동 실행 스크립트
+  - `build-exe.bat`: Windows 환경 원클릭 `.exe` 빌드 스크립트 (`release/AntWordProfiler-Portable.exe`, `release/win-unpacked/AntWordProfiler.exe` 생성)
 
 ---
 
@@ -75,10 +78,17 @@ npm run type-check
 npm test
 ```
 
-프로덕션 빌드:
+프로덕션 웹 빌드:
 ```powershell
 npm run build
 ```
+
+Windows 독립 실행 파일(`.exe`) 빌드 (`build-exe.bat` 더블클릭 또는 아래 명령 실행):
+```powershell
+npm run exe:build
+```
+- `release/AntWordProfiler-Portable.exe`: USB·다른 PC로 파일 1개만 복사해 설치 없이 실행할 수 있는 단일 포터블 실행 파일
+- `release/win-unpacked/AntWordProfiler.exe`: 압축 해제 없이 즉시 실행되는 로컬 상시 사용용 실행 파일 (`win-unpacked` 폴더 전체 유지 필요)
 
 ---
 
@@ -130,3 +140,18 @@ npm run build
   - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
   - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 7개 테스트 파일 / 39개 테스트 전원 통과 — Gemini 직접 호출·세대별 `thinkingConfig`·`GET` 연결 확인·`503` 즉시 우회 및 쿨다운·이중 키 독립 저장 테스트 포함).
   - UI 정적 디자인 스캔 통과: `impeccable.cmd detect .` (50개 파일 스캔 통과).
+
+## [2026-11-16 18:36] 업데이트 이력 (Commit ID: `dd88102`)
+- **수정 내용**:
+  - **기존 웹앱 유지 + Windows 독립 실행형 `.exe` 데스크톱 패키징(`Electron` + `electron-builder`) 추가**:
+    - 기존 웹 개발·배포 파이프라인(`npm run dev`, `npm run build`, `start.bat`, `.github/workflows/deploy-pages.yml`)을 100% 그대로 유지하면서 동일 코드베이스를 Windows `.exe`로 실행·배포할 수 있도록 `electron/main.cjs`, `electron-builder.json`, `build-exe.bat` 및 `npm run exe:build` 스크립트를 추가(`release/`는 `.gitignore` 제외).
+    - 로컬 포트 개방(방화벽 경고)이나 `file://` 모듈·CORS 제약 없이 동작하도록 `app://antwordprofiler` 커스텀 보안 스킴 핸들러(한글 교육과정 어휘장 경로 `decodeURIComponent` 처리 및 `dist/` 경로 탐색 차단 포함)를 구현하고, `openRouterClient.ts`에서 `app://` 오리진 실행 시 `HTTP-Referer`를 `https://antwordprofiler.local`로 안전하게 폴백하도록 보완.
+    - 비관리자 Windows 환경의 `winCodeSign` 심볼릭 링크 추출 오류를 방지(`signAndEditExecutable: false`)하여 단일 포터블 실행 파일(`release/AntWordProfiler-Portable.exe`)과 즉시 실행 폴더(`release/win-unpacked/AntWordProfiler.exe`)가 함께 생성되도록 구성.
+  - **발생 문제 및 해결 1 (`.exe` 실행 시 OS DPI 배율로 인한 글자·UI 과확대)**:
+    - Windows 고배율(125% 등) 환경에서 `.exe` 실행 시 웹앱 대비 글자와 UI가 다소 크게 표시되던 문제를 해결하기 위해 `electron/main.cjs`에 기본 화면 배율 `DEFAULT_ZOOM_FACTOR = 0.8`(`dom-ready`/`did-finish-load` 강제 적용), 시작 시 창 최대화(`win.maximize()`), 단축키 배율 조절(`Ctrl + +` / `Ctrl + -` / `Ctrl + 0`)을 적용해 웹앱 화면 크기와 일치시킴.
+  - **발생 문제 및 해결 2 (`File Profiler` 및 `Statistics` 상단 툴바 2줄 줄바꿈 현상)**:
+    - `EditorToolbar.tsx`와 `workspace.css`의 `.editor-toolbar`·`.toolbar-group` 및 `.stats-subtabs-bar`·`.stats-subtabs-list`·`.stats-actions-group`을 `flex-wrap: nowrap` 한 줄 레이아웃으로 고정하고, 검색 입력창(`.editor-search-group`, `190px ~ 280px` 가변 폭)과 통계 탭 알약 버튼(`.subtab-pill`, `13px` 최소 글꼴 바닥선 준수) 여백을 최적화하여 두 툴바 모두 한 행에 나란히 배치되도록 개선.
+- **검증 결과**:
+  - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
+  - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 7개 테스트 파일 / 40개 테스트 전원 통과 — `app://` 데스크톱 오리진 `HTTP-Referer` 검증 테스트 포함).
+  - 프로덕션 웹 빌드 및 Windows `.exe` 패키징 통과: `npm run exe:build` (`tsc -b && vite build && electron-builder --win portable`, Exit Code 0 — `release/AntWordProfiler-Portable.exe` 및 `release/win-unpacked/AntWordProfiler.exe` 정상 생성 확인).
