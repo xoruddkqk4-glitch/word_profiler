@@ -260,8 +260,8 @@ export const HighlightedTextView: React.FC = () => {
               <span className="menu-item-left">
                 <Wand2 size={15} />{' '}
                 {ctxMenu.phraseText
-                  ? '선택 표현 AI 추천 (단어 3 + 문장 3)'
-                  : 'AI 추천 (단어 3 + 문장 3)'}
+                  ? '선택 표현 AI 추천 (단어 3+3 · 문장 3+3)'
+                  : 'AI 추천 (단어 3+3 · 문장 3+3)'}
               </span>
             </button>
 

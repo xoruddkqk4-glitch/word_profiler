@@ -192,8 +192,10 @@ type RawParaphraseItem =
     };
 
 interface RawCombinedLlmResponse {
-  synonyms?: RawSynonymItem[];
-  paraphrases?: RawParaphraseItem[];
+  inListSynonyms: RawSynonymItem[];
+  freeSynonyms: RawSynonymItem[];
+  inListParaphrases: RawParaphraseItem[];
+  freeParaphrases: RawParaphraseItem[];
 }
 
 const MAX_REPLACEMENT_TOKENS = 6;
@@ -371,6 +373,7 @@ function evaluateSynonymCandidates(params: {
 
     let allWithinCap = true;
     let allInActive = true;
+    const outTokens: string[] = [];
     let highestLevel: number | null = null;
     let primaryListId: string | null = null;
     let primaryListName = '';
@@ -378,7 +381,10 @@ function evaluateSynonymCandidates(params: {
 
     for (const p of pieces) {
       const st = verifySingleWord(p.token, verifierCtx, targetMaxLevel);
-      if (!st.withinTargetCap) allWithinCap = false;
+      if (!st.withinTargetCap) {
+        allWithinCap = false;
+        outTokens.push(p.token);
+      }
       if (!st.inActiveList && st.kind !== 'ignored') allInActive = false;
       if (st.kind === 'level' && st.statLevelNumber !== null) {
         if (highestLevel === null || st.statLevelNumber > highestLevel) {
@@ -405,6 +411,7 @@ function evaluateSynonymCandidates(params: {
       isMultiWord: pieces.length > 1,
       allTokensWithinCap: allWithinCap,
       allTokensInActiveLists: allInActive,
+      outTokens,
       highestLevelNumber: highestLevel,
       primaryListId,
       primaryListName:
@@ -442,6 +449,14 @@ function parseCombinedResponse(raw: unknown): RawCombinedLlmResponse {
   }
   let obj = raw as Record<string, unknown>;
   const hasTopLevelKeys =
+    obj.inListSynonyms !== undefined ||
+    obj.freeSynonyms !== undefined ||
+    obj.outOfListSynonyms !== undefined ||
+    obj.unconstrainedSynonyms !== undefined ||
+    obj.inListParaphrases !== undefined ||
+    obj.freeParaphrases !== undefined ||
+    obj.outOfListParaphrases !== undefined ||
+    obj.unconstrainedParaphrases !== undefined ||
     obj.synonyms !== undefined ||
     obj.replacements !== undefined ||
     obj.synonymCandidates !== undefined ||
@@ -455,22 +470,45 @@ function parseCombinedResponse(raw: unknown): RawCombinedLlmResponse {
       obj = nested as Record<string, unknown>;
     }
   }
-  const synonyms =
-    obj.synonyms ?? obj.replacements ?? obj.synonymCandidates;
-  const paraphrases =
+
+  const inListSynonyms =
+    obj.inListSynonyms ??
+    obj.synonyms ??
+    obj.replacements ??
+    obj.synonymCandidates;
+  const freeSynonyms =
+    obj.freeSynonyms ?? obj.outOfListSynonyms ?? obj.unconstrainedSynonyms;
+  const inListParaphrases =
+    obj.inListParaphrases ??
     obj.paraphrases ??
     obj.paraphraseCandidates ??
     obj.rewrites ??
     obj.sentences;
-  if (synonyms != null && !Array.isArray(synonyms)) {
+  const freeParaphrases =
+    obj.freeParaphrases ??
+    obj.outOfListParaphrases ??
+    obj.unconstrainedParaphrases;
+
+  if (
+    (inListSynonyms != null && !Array.isArray(inListSynonyms)) ||
+    (freeSynonyms != null && !Array.isArray(freeSynonyms))
+  ) {
     throw new Error('AI 추천 단어 응답 형식이 올바르지 않습니다.');
   }
-  if (paraphrases != null && !Array.isArray(paraphrases)) {
+  if (
+    (inListParaphrases != null && !Array.isArray(inListParaphrases)) ||
+    (freeParaphrases != null && !Array.isArray(freeParaphrases))
+  ) {
     throw new Error('AI 패러프레이즈 응답 형식이 올바르지 않습니다.');
   }
+
   return {
-    synonyms: (synonyms as RawSynonymItem[] | undefined | null) ?? [],
-    paraphrases: (paraphrases as RawParaphraseItem[] | undefined | null) ?? [],
+    inListSynonyms: (inListSynonyms as RawSynonymItem[] | undefined | null) ?? [],
+    freeSynonyms: (freeSynonyms as RawSynonymItem[] | undefined | null) ?? [],
+    inListParaphrases:
+      (inListParaphrases as RawParaphraseItem[] | undefined | null) ?? [],
+    freeParaphrases:
+      (freeParaphrases as RawParaphraseItem[] | undefined | null) ?? [],
   };
 }
 
@@ -481,7 +519,8 @@ function extractParaphraseArrayFromResponse(raw: unknown): RawParaphraseItem[] {
   if (!raw || typeof raw !== 'object') {
     return [];
   }
-  return parseCombinedResponse(raw).paraphrases ?? [];
+  const parsed = parseCombinedResponse(raw);
+  return [...parsed.inListParaphrases, ...parsed.freeParaphrases];
 }
 
 /**
@@ -592,17 +631,51 @@ export async function suggestReplacementsAndParaphrases(params: {
   const wordsToReplaceSample = guidance.wordsToReplace.slice(0, 12);
   const allowedWordsSample = guidance.allowedWordsInSpan.slice(0, 24);
 
+  const buildAuditedSlotParaphrase = (
+    syn: VerifiedSynonymCandidate,
+    styleLabelKo: string,
+    noteKo: string,
+  ): VerifiedParaphraseCandidate | null => {
+    const rewritten = buildSentenceWithSpanReplacement(
+      profile,
+      spanStartIdx,
+      spanEndIdx,
+      enclosing.startTokenIdx,
+      enclosing.endTokenIdx,
+      syn.replacementText,
+    );
+    const compareKey = normalizeSentenceCompareKey(rewritten);
+    if (!compareKey || compareKey === enclosingCompareKey) return null;
+    const audit = auditParaphraseCandidateText(
+      rewritten,
+      verifierCtx,
+      targetMaxLevel,
+      guidance.properNounsCarryover,
+    );
+    return {
+      styleLabelKo,
+      rewrittenText: rewritten,
+      noteKo,
+      leadingWs: audit.leadingWs,
+      tokens: audit.tokens,
+      remainingOutWords: audit.remainingOutWords,
+      outWordCount: audit.outWordCount,
+      totalTokens: audit.totalTokens,
+      inTargetPercentage: audit.inTargetPercentage,
+    };
+  };
+
   const firstRaw = parseCombinedResponse(
     await callOpenRouterJson<unknown>({
       config,
       temperature: 0.2,
-      maxTokens: 2400,
+      maxTokens: 3200,
       signal,
       messages: [
         {
           role: 'system',
           content:
-            'EFL controlled-vocabulary editor. Use high-frequency basic English fitting the learner lists. Output one raw RFC 8259 JSON object only.',
+            'EFL lexical & paraphrase assistant. Generate BOTH strict word-list-controlled candidates AND natural unconstrained candidates. Output one raw RFC 8259 JSON object only.',
         },
         {
           role: 'user',
@@ -611,21 +684,27 @@ export async function suggestReplacementsAndParaphrases(params: {
             `Sentence: "${enclosing.sentenceWithPunct}"`,
             `Allowed lists: ${levelDesc}`,
             !verifierCtx.masterEnabled
-              ? 'Word-family expansion OFF: prefer base/singular forms (student, word, help).'
+              ? 'Word-family expansion OFF for inList*: prefer base/singular forms (student, word, help).'
               : '',
             wordsToReplaceSample.length > 0
-              ? `Avoid/replace out-of-list words: [${wordsToReplaceSample.join(', ')}]`
+              ? `For inListParaphrases, avoid/replace out-of-list words: [${wordsToReplaceSample.join(', ')}]`
               : '',
             allowedWordsSample.length > 0
               ? `Safe in-list words: [${allowedWordsSample.join(', ')}]`
               : '',
             'JSON schema:',
             '{',
-            '  "synonyms": [{ "replacementText": "slot replacement", "baseForm": "lemma", "meaningKo": "핵심 뜻", "nuanceKo": "뉘앙스" }],',
-            '  "paraphrases": [{ "styleLabelKo": "자연스러운 표준 표현 | 쉬운 기초어휘 풀이 | 원문 구조 유지 최소 수정", "rewrittenText": "rewritten sentence", "noteKo": "짧은 설명" }]',
+            '  "inListSynonyms": [{ "replacementText": "in-list replacement", "baseForm": "lemma", "meaningKo": "핵심 뜻", "nuanceKo": "뉘앙스" }],',
+            '  "freeSynonyms": [{ "replacementText": "unconstrained natural replacement", "baseForm": "lemma", "meaningKo": "핵심 뜻", "nuanceKo": "뉘앙스" }],',
+            '  "inListParaphrases": [{ "styleLabelKo": "쉬운 기초어휘 풀이 | 자연스러운 표준 표현 | 원문 구조 유지 최소 수정", "rewrittenText": "sentence using ONLY allowed lists", "noteKo": "짧은 설명" }],',
+            '  "freeParaphrases": [{ "styleLabelKo": "자연스러운 확장 표현 | 정교한 의미 전달 | 학술·심화 재구성", "rewrittenText": "natural sentence including unlisted words", "noteKo": "짧은 설명" }]',
             '}',
-            `Rules: 5 ${isMultiWord ? 'short (1-4 word)' : 'single-word'} replacements + 3 distinct simple-core paraphrases different from Sentence.`,
-            'Use only allowed lists; keep meaningKo/nuanceKo/noteKo <= 10 words.',
+            'Rules:',
+            `- inListSynonyms: 5 ${isMultiWord ? 'short (1-4 word)' : 'single-word'} replacements strictly inside Allowed lists.`,
+            `- freeSynonyms: 5 distinct ${isMultiWord ? 'short (1-4 word)' : 'single-word'} contextually accurate replacements NOT restricted to Allowed lists (prefer natural words outside Allowed lists).`,
+            '- inListParaphrases: 4 distinct sentences different from Sentence using ONLY Allowed lists.',
+            '- freeParaphrases: 4 distinct natural sentences different from Sentence and inListParaphrases, freely including expressive/academic words outside Allowed lists.',
+            '- Keep meaningKo/nuanceKo/noteKo <= 10 words.',
           ]
             .filter(Boolean)
             .join('\n'),
@@ -634,25 +713,33 @@ export async function suggestReplacementsAndParaphrases(params: {
     }),
   );
 
-  const synonymPass = evaluateSynonyms(firstRaw.synonyms ?? []);
-  let paraphraseAll = auditParaphrases(firstRaw.paraphrases ?? []);
+  const inSynPass = evaluateSynonyms(firstRaw.inListSynonyms);
+  const freeSynPass = evaluateSynonyms(firstRaw.freeSynonyms);
+  let inParaAudited = auditParaphrases(firstRaw.inListParaphrases);
+  const freeParaAudited = auditParaphrases(firstRaw.freeParaphrases);
   let repaired = false;
   let attemptedParaphraseRepair = false;
 
-  const inListSynonymCount = synonymPass.verified.filter(
-    (c) => c.allTokensWithinCap,
-  ).length;
+  const initialWithinCapCount = [
+    ...inSynPass.verified,
+    ...freeSynPass.verified,
+  ].filter((c) => c.allTokensWithinCap).length;
 
   const needSynonymRepair =
-    verifierCtx.activeListCount > 0 && inListSynonymCount === 0;
-  const needParaphraseRepair = paraphraseAll.length === 0;
+    verifierCtx.activeListCount > 0 && initialWithinCapCount === 0;
+  const needParaphraseRepair =
+    inParaAudited.length === 0 && freeParaAudited.length === 0;
 
   if (needSynonymRepair || needParaphraseRepair) {
     repaired = true;
     attemptedParaphraseRepair = needParaphraseRepair;
-    const rejectedSyn = synonymPass.rejectedForms.slice(0, 12).join(', ');
+    const rejectedSyn = Array.from(
+      new Set([...inSynPass.rejectedForms, ...freeSynPass.rejectedForms]),
+    )
+      .slice(0, 12)
+      .join(', ');
     const rejectedPara = Array.from(
-      new Set(paraphraseAll.flatMap((c) => c.remainingOutWords)),
+      new Set(inParaAudited.flatMap((c) => c.remainingOutWords)),
     )
       .slice(0, 16)
       .join(', ');
@@ -688,11 +775,11 @@ export async function suggestReplacementsAndParaphrases(params: {
               'Return ONLY valid RFC 8259 JSON with exact keys:',
               '{',
               needSynonymRepair
-                ? '  "synonyms": [{ "replacementText": "word", "baseForm": "lemma", "meaningKo": "뜻", "nuanceKo": "어감" }],'
-                : '  "synonyms": [],',
+                ? '  "inListSynonyms": [{ "replacementText": "word", "baseForm": "lemma", "meaningKo": "뜻", "nuanceKo": "어감" }],'
+                : '  "inListSynonyms": [],',
               needParaphraseRepair
-                ? '  "paraphrases": [{ "styleLabelKo": "쉬운 기초어휘 풀이", "rewrittenText": "Full sentence.", "noteKo": "설명" }]'
-                : '  "paraphrases": []',
+                ? '  "inListParaphrases": [{ "styleLabelKo": "쉬운 기초어휘 풀이", "rewrittenText": "Full sentence.", "noteKo": "설명" }]'
+                : '  "inListParaphrases": []',
               '}',
               needSynonymRepair
                 ? 'Provide 5 much simpler in-list replacements.'
@@ -709,29 +796,43 @@ export async function suggestReplacementsAndParaphrases(params: {
     );
 
     if (needSynonymRepair) {
-      const pass2 = evaluateSynonyms(repairRaw.synonyms ?? []);
+      const pass2 = evaluateSynonyms([
+        ...repairRaw.inListSynonyms,
+        ...repairRaw.freeSynonyms,
+      ]);
       const existing = new Set(
-        synonymPass.verified.map((m) => m.replacementText.toLowerCase()),
+        inSynPass.verified.map((m) => m.replacementText.toLowerCase()),
       );
       for (const c of pass2.verified) {
         const k = c.replacementText.toLowerCase();
         if (!existing.has(k)) {
-          synonymPass.verified.push(c);
+          inSynPass.verified.push(c);
           existing.add(k);
         }
       }
     }
 
     if (needParaphraseRepair) {
-      paraphraseAll = [
-        ...auditParaphrases(repairRaw.paraphrases ?? []),
-        ...paraphraseAll,
+      inParaAudited = [
+        ...auditParaphrases([
+          ...repairRaw.inListParaphrases,
+          ...repairRaw.freeParaphrases,
+        ]),
+        ...inParaAudited,
       ];
     }
   }
 
-  const synonymCandidates = synonymPass.verified
-    .filter((c) => c.allTokensWithinCap)
+  // Assemble Group A: up to 3 replacement candidates strictly within active Word Lists
+  const uniqueInSynPool = new Map<string, VerifiedSynonymCandidate>();
+  for (const c of [...inSynPass.verified, ...freeSynPass.verified]) {
+    if (!c.allTokensWithinCap) continue;
+    const key = c.replacementText.toLowerCase();
+    if (!uniqueInSynPool.has(key)) {
+      uniqueInSynPool.set(key, c);
+    }
+  }
+  const inListSynonymCandidates = Array.from(uniqueInSynPool.values())
     .sort((a, b) => {
       const lvlA = a.highestLevelNumber ?? 999;
       const lvlB = b.highestLevelNumber ?? 999;
@@ -741,34 +842,65 @@ export async function suggestReplacementsAndParaphrases(params: {
     })
     .slice(0, 3);
 
-  const uniquePara = new Map<string, VerifiedParaphraseCandidate>();
-  const addUniqueParaphrase = (c: VerifiedParaphraseCandidate) => {
-    if (uniquePara.size >= 3) return;
-    const key = normalizeSentenceCompareKey(c.rewrittenText);
-    if (!key || uniquePara.has(key)) return;
-    uniquePara.set(key, c);
+  // Assemble Group B: up to 3 free/unconstrained replacement candidates (out-of-list first, no duplicates with Group A)
+  const usedSynKeys = new Set(
+    inListSynonymCandidates.map((c) => c.replacementText.toLowerCase()),
+  );
+  const freeSynonymCandidates: VerifiedSynonymCandidate[] = [];
+  const pushFreeSynonym = (c: VerifiedSynonymCandidate) => {
+    if (freeSynonymCandidates.length >= 3) return;
+    const key = c.replacementText.toLowerCase();
+    if (usedSynKeys.has(key)) return;
+    usedSynKeys.add(key);
+    freeSynonymCandidates.push(c);
   };
-
-  // Tier 1: Strictly in-list (outWordCount === 0) paraphrases
-  for (const c of paraphraseAll) {
-    if (c.outWordCount !== 0) continue;
-    addUniqueParaphrase(c);
+  for (const c of freeSynPass.verified) {
+    if (!c.allTokensWithinCap) pushFreeSynonym(c);
+  }
+  for (const c of inSynPass.verified) {
+    if (!c.allTokensWithinCap) pushFreeSynonym(c);
+  }
+  for (const c of freeSynPass.verified) {
+    if (c.allTokensWithinCap) pushFreeSynonym(c);
+  }
+  for (const c of inSynPass.verified) {
+    if (c.allTokensWithinCap) pushFreeSynonym(c);
   }
 
-  // Tier 2: Best-audited LLM paraphrases sorted by fewest out-of-list words
-  if (uniquePara.size === 0 && paraphraseAll.length > 0) {
-    const sortedBest = [...paraphraseAll].sort(
+  // Assemble Group C: up to 3 Word-List-only paraphrases (strictly 0 out-words first + existing 5-tier rescue)
+  const inParaMap = new Map<string, VerifiedParaphraseCandidate>();
+  const addInPara = (c: VerifiedParaphraseCandidate) => {
+    if (inParaMap.size >= 3) return;
+    const key = normalizeSentenceCompareKey(c.rewrittenText);
+    if (!key || inParaMap.has(key)) return;
+    inParaMap.set(key, c);
+  };
+
+  // Tier C1: Strictly in-list (outWordCount === 0) paraphrases across both pools
+  for (const c of [...inParaAudited, ...freeParaAudited]) {
+    if (c.outWordCount === 0) {
+      addInPara(c);
+    }
+  }
+
+  // Tier C2: Fill remaining slots up to 3 from inParaAudited sorted by fewest out-of-list words
+  if (inParaMap.size < 3 && inParaAudited.length > 0) {
+    const sortedBest = [...inParaAudited].sort(
       (a, b) =>
         a.outWordCount - b.outWordCount ||
         b.inTargetPercentage - a.inTargetPercentage,
     );
     for (const c of sortedBest) {
-      addUniqueParaphrase(c);
+      addInPara(c);
     }
   }
 
-  // Tier 3: Dedicated lightweight paraphrase rescue request only if Pass 2 did not already attempt it
-  if (uniquePara.size === 0 && !attemptedParaphraseRepair) {
+  // Tier C3: Dedicated lightweight paraphrase rescue request only if Pass 2 did not already attempt it
+  if (
+    inParaMap.size === 0 &&
+    !attemptedParaphraseRepair &&
+    freeParaAudited.length === 0
+  ) {
     try {
       const rescueRaw = await callOpenRouterJson<unknown>({
         config,
@@ -791,7 +923,7 @@ export async function suggestReplacementsAndParaphrases(params: {
               'Rewrite the original sentence into 3 clear English sentences that preserve its meaning using simpler everyday wording.',
               'Each rewrittenText MUST be different from Original sentence.',
               'Return ONLY valid JSON:',
-              '{ "paraphrases": [{ "styleLabelKo": "쉬운 문장 재구성", "rewrittenText": "Simple rewritten sentence.", "noteKo": "간단한 한국어 설명" }] }',
+              '{ "inListParaphrases": [{ "styleLabelKo": "쉬운 문장 재구성", "rewrittenText": "Simple rewritten sentence.", "noteKo": "간단한 한국어 설명" }] }',
             ].join('\n'),
           },
         ],
@@ -806,54 +938,37 @@ export async function suggestReplacementsAndParaphrases(params: {
             b.inTargetPercentage - a.inTargetPercentage,
         );
         for (const c of sortedRescue) {
-          addUniqueParaphrase(c);
+          addInPara(c);
         }
       }
     } catch (err) {
       if (isAbortError(err, signal)) {
         throw err;
       }
-      // Fall through cleanly to local deterministic synthesis (Tier 4 / Tier 5)
+      // Fall through cleanly to local deterministic synthesis (Tier C4 / Tier C5)
     }
   }
 
-  // Tier 4: Deterministic local synthesis substituting verified synonym replacements into the sentence
-  if (uniquePara.size === 0) {
-    const synPool = [...synonymCandidates, ...synonymPass.verified];
+  // Tier C4: Deterministic local synthesis substituting verified synonym replacements into the sentence
+  if (inParaMap.size === 0) {
+    const synPool = [
+      ...inListSynonymCandidates,
+      ...inSynPass.verified,
+      ...freeSynonymCandidates,
+    ];
     for (const syn of synPool) {
-      const rewritten = buildSentenceWithSpanReplacement(
-        profile,
-        spanStartIdx,
-        spanEndIdx,
-        enclosing.startTokenIdx,
-        enclosing.endTokenIdx,
-        syn.replacementText,
+      if (inParaMap.size >= 3) break;
+      const synth = buildAuditedSlotParaphrase(
+        syn,
+        '추천 어휘 적용 문장',
+        `'${targetText}' 위치에 '${syn.replacementText}'을(를) 적용해 재구성한 문장입니다.`,
       );
-      const compareKey = normalizeSentenceCompareKey(rewritten);
-      if (!compareKey || compareKey === enclosingCompareKey) continue;
-      if (uniquePara.has(compareKey)) continue;
-      const audit = auditParaphraseCandidateText(
-        rewritten,
-        verifierCtx,
-        targetMaxLevel,
-        guidance.properNounsCarryover,
-      );
-      addUniqueParaphrase({
-        styleLabelKo: '추천 어휘 적용 문장',
-        rewrittenText: rewritten,
-        noteKo: `'${targetText}' 위치에 '${syn.replacementText}'을(를) 적용해 재구성한 문장입니다.`,
-        leadingWs: audit.leadingWs,
-        tokens: audit.tokens,
-        remainingOutWords: audit.remainingOutWords,
-        outWordCount: audit.outWordCount,
-        totalTokens: audit.totalTokens,
-        inTargetPercentage: audit.inTargetPercentage,
-      });
+      if (synth) addInPara(synth);
     }
   }
 
-  // Tier 5: Absolute guarantee floor (>= 1 paraphrase entry always present)
-  if (uniquePara.size === 0 && enclosing.sentenceWithPunct.trim()) {
+  // Tier C5: Absolute guarantee floor (>= 1 paraphrase entry always present)
+  if (inParaMap.size === 0 && enclosing.sentenceWithPunct.trim()) {
     const baselineText = enclosing.sentenceWithPunct.trim();
     const audit = auditParaphraseCandidateText(
       baselineText,
@@ -861,21 +976,63 @@ export async function suggestReplacementsAndParaphrases(params: {
       targetMaxLevel,
       guidance.properNounsCarryover,
     );
-    uniquePara.set(normalizeSentenceCompareKey(baselineText) || baselineText.toLowerCase(), {
-      styleLabelKo: '원문 기반 기준 문장',
-      rewrittenText: baselineText,
-      noteKo:
-        '대체 어휘 후보가 비어 있어 원문 어휘 구성을 표시합니다. 다시 추천을 눌러 재시도해 보세요.',
-      leadingWs: audit.leadingWs,
-      tokens: audit.tokens,
-      remainingOutWords: audit.remainingOutWords,
-      outWordCount: audit.outWordCount,
-      totalTokens: audit.totalTokens,
-      inTargetPercentage: audit.inTargetPercentage,
-    });
+    inParaMap.set(
+      normalizeSentenceCompareKey(baselineText) || baselineText.toLowerCase(),
+      {
+        styleLabelKo: '원문 기반 기준 문장',
+        rewrittenText: baselineText,
+        noteKo:
+          '대체 어휘 후보가 비어 있어 원문 어휘 구성을 표시합니다. 다시 추천을 눌러 재시도해 보세요.',
+        leadingWs: audit.leadingWs,
+        tokens: audit.tokens,
+        remainingOutWords: audit.remainingOutWords,
+        outWordCount: audit.outWordCount,
+        totalTokens: audit.totalTokens,
+        inTargetPercentage: audit.inTargetPercentage,
+      },
+    );
   }
 
-  const paraphraseCandidates = Array.from(uniquePara.values()).slice(0, 3);
+  const inListParaphraseCandidates = Array.from(inParaMap.values()).slice(0, 3);
+
+  // Assemble Group D: up to 3 natural paraphrases including out-of-list words (no duplicates with Group C)
+  const usedParaKeys = new Set(Array.from(inParaMap.keys()));
+  const freeParaMap = new Map<string, VerifiedParaphraseCandidate>();
+  const addFreePara = (c: VerifiedParaphraseCandidate) => {
+    if (freeParaMap.size >= 3) return;
+    const key = normalizeSentenceCompareKey(c.rewrittenText);
+    if (!key || key === enclosingCompareKey) return;
+    if (usedParaKeys.has(key) || freeParaMap.has(key)) return;
+    freeParaMap.set(key, c);
+  };
+
+  for (const c of freeParaAudited) {
+    if (c.outWordCount >= 1) addFreePara(c);
+  }
+  for (const c of inParaAudited) {
+    if (c.outWordCount >= 1) addFreePara(c);
+  }
+  for (const c of freeParaAudited) {
+    if (c.outWordCount === 0) addFreePara(c);
+  }
+  for (const c of inParaAudited) {
+    if (c.outWordCount === 0) addFreePara(c);
+  }
+
+  // Deterministic synthesis fallback for Group D from Group B (freeSynonymCandidates)
+  if (freeParaMap.size < 3 && freeSynonymCandidates.length > 0) {
+    for (const syn of freeSynonymCandidates) {
+      if (freeParaMap.size >= 3) break;
+      const synth = buildAuditedSlotParaphrase(
+        syn,
+        '확장 대체 어휘 적용 문장',
+        `'${targetText}' 위치에 '${syn.replacementText}'을(를) 적용해 표현한 문장입니다.`,
+      );
+      if (synth) addFreePara(synth);
+    }
+  }
+
+  const freeParaphraseCandidates = Array.from(freeParaMap.values()).slice(0, 3);
 
   return {
     targetText,
@@ -885,8 +1042,12 @@ export async function suggestReplacementsAndParaphrases(params: {
     targetMaxLevel,
     sourceOriginalText: profile.originalText,
     sourceId: profile.sourceId,
-    synonymCandidates,
-    paraphraseCandidates,
+    inListSynonymCandidates,
+    freeSynonymCandidates,
+    inListParaphraseCandidates,
+    freeParaphraseCandidates,
+    synonymCandidates: inListSynonymCandidates,
+    paraphraseCandidates: inListParaphraseCandidates,
     paraphraseSpanStartIdx: enclosing.startTokenIdx,
     paraphraseSpanEndIdx: enclosing.endTokenIdx,
     repaired,

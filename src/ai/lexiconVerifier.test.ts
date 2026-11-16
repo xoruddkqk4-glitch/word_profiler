@@ -6,6 +6,7 @@ import {
   buildSentencePreviewForSpan,
   getVerifierContext,
   sanitizeSingleTokenReplacement,
+  splitSentenceAroundSpan,
 } from './lexiconVerifier';
 
 function tok(
@@ -84,6 +85,38 @@ describe('buildSentencePreviewForSpan', () => {
       'turned around',
     );
     expect(preview).toBe('She [turned around] quickly.');
+  });
+});
+
+describe('splitSentenceAroundSpan', () => {
+  it('isolates the exact token occurrence even when the same word appears twice in a sentence', () => {
+    const profile = makeProfile([
+      tok({ token: 'The', trailingWs: ' ', lookupKey: 'the' }, 0),
+      tok({ token: 'word', trailingWs: ' ', lookupKey: 'word' }, 1),
+      tok({ token: 'and', trailingWs: ' ', lookupKey: 'and' }, 2),
+      tok({ token: 'another', trailingWs: ' ', lookupKey: 'another' }, 3),
+      tok({ token: 'word', trailingWs: '.', lookupKey: 'word' }, 4),
+    ]);
+
+    expect(splitSentenceAroundSpan(profile, 4, 4)).toEqual({
+      before: 'The word and another ',
+      focus: 'word',
+      after: '.',
+    });
+  });
+
+  it('applies surface capitalization when splitting around a replacement word at sentence start', () => {
+    const profile = makeProfile([
+      tok({ token: 'Lexical', trailingWs: ' ', lookupKey: 'lexical' }, 0),
+      tok({ token: 'analysis', trailingWs: ' ', lookupKey: 'analysis' }, 1),
+      tok({ token: 'helps', trailingWs: '.', lookupKey: 'helps' }, 2),
+    ]);
+
+    expect(splitSentenceAroundSpan(profile, 0, 0, 'word')).toEqual({
+      before: '',
+      focus: 'Word',
+      after: ' analysis helps.',
+    });
   });
 });
 

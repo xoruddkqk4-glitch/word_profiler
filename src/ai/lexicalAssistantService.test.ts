@@ -325,3 +325,232 @@ describe('suggestReplacementsAndParaphrases paraphrase guarantee', () => {
     ]);
   });
 });
+
+describe('suggestReplacementsAndParaphrases 4-group (3+3+3+3) dual-track classification', () => {
+  it('returns 3 in-list words, 3 free words, 3 in-list paraphrases, and 3 free paraphrases in a single call without cross-group duplicates', async () => {
+    const profile = buildTestProfile([
+      buildToken('The', ' ', 0),
+      buildToken('esoteric', ' ', 1, 'out'),
+      buildToken('plan', ' ', 2),
+      buildToken('worked', '.', 3),
+    ]);
+    const verifierCtx = buildTestVerifierCtx([
+      'the',
+      'simple',
+      'clear',
+      'easy',
+      'plain',
+      'plan',
+      'idea',
+      'worked',
+      'well',
+      'good',
+      'way',
+      'helpful',
+    ]);
+
+    mockedCallOpenRouterJson.mockResolvedValueOnce({
+      inListSynonyms: [
+        { replacementText: 'simple', baseForm: 'simple', meaningKo: '단순한' },
+        { replacementText: 'clear', baseForm: 'clear', meaningKo: '분명한' },
+        { replacementText: 'easy', baseForm: 'easy', meaningKo: '쉬운' },
+        { replacementText: 'plain', baseForm: 'plain', meaningKo: '평이한' },
+      ],
+      freeSynonyms: [
+        { replacementText: 'arcane', baseForm: 'arcane', meaningKo: '난해한' },
+        { replacementText: 'obscure', baseForm: 'obscure', meaningKo: '모호한' },
+        { replacementText: 'cryptic', baseForm: 'cryptic', meaningKo: '수수께끼같은' },
+        // Duplicate with Group A should not appear in Group B
+        { replacementText: 'simple', baseForm: 'simple', meaningKo: '단순한' },
+      ],
+      inListParaphrases: [
+        {
+          styleLabelKo: '쉬운 어휘',
+          rewrittenText: 'The simple plan worked well.',
+          noteKo: '설명1',
+        },
+        {
+          styleLabelKo: '명확한 표현',
+          rewrittenText: 'The clear plan worked well.',
+          noteKo: '설명2',
+        },
+        {
+          styleLabelKo: '기초 재구성',
+          rewrittenText: 'The easy idea worked well.',
+          noteKo: '설명3',
+        },
+      ],
+      freeParaphrases: [
+        {
+          styleLabelKo: '자연스러운 확장',
+          rewrittenText: 'The intricate strategy succeeded effortlessly.',
+          noteKo: '확장1',
+        },
+        {
+          styleLabelKo: '학술적 표현',
+          rewrittenText: 'The specialized approach proved effective.',
+          noteKo: '확장2',
+        },
+        {
+          styleLabelKo: '정교한 문맥',
+          rewrittenText: 'The complex method functioned smoothly.',
+          noteKo: '확장3',
+        },
+      ],
+    });
+
+    const res = await suggestReplacementsAndParaphrases({
+      profile,
+      spanStartIdx: 1,
+      spanEndIdx: 1,
+      targetMaxLevel: 1,
+      verifierCtx,
+      config: TEST_CONFIG,
+    });
+
+    expect(mockedCallOpenRouterJson).toHaveBeenCalledTimes(1);
+
+    expect(res.inListSynonymCandidates.map((c) => c.replacementText)).toEqual([
+      'simple',
+      'clear',
+      'easy',
+    ]);
+    expect(
+      res.inListSynonymCandidates.every((c) => c.allTokensWithinCap),
+    ).toBe(true);
+
+    expect(res.freeSynonymCandidates.map((c) => c.replacementText)).toEqual([
+      'arcane',
+      'obscure',
+      'cryptic',
+    ]);
+    expect(
+      res.freeSynonymCandidates.every((c) => !c.allTokensWithinCap),
+    ).toBe(true);
+
+    expect(res.inListParaphraseCandidates).toHaveLength(3);
+    expect(
+      res.inListParaphraseCandidates.every((c) => c.outWordCount === 0),
+    ).toBe(true);
+
+    expect(res.freeParaphraseCandidates).toHaveLength(3);
+    expect(
+      res.freeParaphraseCandidates.every((c) => c.outWordCount >= 1),
+    ).toBe(true);
+
+    const inKeys = new Set(
+      res.inListParaphraseCandidates.map((c) => c.rewrittenText.toLowerCase()),
+    );
+    for (const fc of res.freeParaphraseCandidates) {
+      expect(inKeys.has(fc.rewrittenText.toLowerCase())).toBe(false);
+    }
+
+    // Backward-compatible aliases mirror in-list candidates
+    expect(res.synonymCandidates).toEqual(res.inListSynonymCandidates);
+    expect(res.paraphraseCandidates).toEqual(res.inListParaphraseCandidates);
+  });
+
+  it('re-routes out-of-list words leaked into inListSynonyms out of Group A and into Group B via lexiconVerifier', async () => {
+    const profile = buildTestProfile([
+      buildToken('The', ' ', 0),
+      buildToken('esoteric', ' ', 1, 'out'),
+      buildToken('test', ' ', 2),
+      buildToken('worked', '.', 3),
+    ]);
+    const verifierCtx = buildTestVerifierCtx([
+      'the',
+      'simple',
+      'clear',
+      'easy',
+      'test',
+      'worked',
+    ]);
+
+    mockedCallOpenRouterJson.mockResolvedValueOnce({
+      inListSynonyms: [
+        // LLM mistakenly includes an out-of-list candidate here
+        { replacementText: 'cryptic', baseForm: 'cryptic', meaningKo: '모호한' },
+        { replacementText: 'simple', baseForm: 'simple', meaningKo: '단순한' },
+        { replacementText: 'clear', baseForm: 'clear', meaningKo: '명확한' },
+        { replacementText: 'easy', baseForm: 'easy', meaningKo: '쉬운' },
+      ],
+      freeSynonyms: [
+        { replacementText: 'arcane', baseForm: 'arcane', meaningKo: '난해한' },
+        { replacementText: 'abstruse', baseForm: 'abstruse', meaningKo: '심오한' },
+      ],
+      inListParaphrases: [
+        { rewrittenText: 'The simple test worked.' },
+      ],
+      freeParaphrases: [
+        { rewrittenText: 'The cryptic experiment succeeded.' },
+      ],
+    });
+
+    const res = await suggestReplacementsAndParaphrases({
+      profile,
+      spanStartIdx: 1,
+      spanEndIdx: 1,
+      targetMaxLevel: 1,
+      verifierCtx,
+      config: TEST_CONFIG,
+    });
+
+    expect(mockedCallOpenRouterJson).toHaveBeenCalledTimes(1);
+    expect(res.inListSynonymCandidates.map((c) => c.replacementText)).toEqual([
+      'simple',
+      'clear',
+      'easy',
+    ]);
+    expect(
+      res.freeSynonymCandidates.map((c) => c.replacementText),
+    ).toContain('cryptic');
+    const crypticItem = res.freeSynonymCandidates.find(
+      (c) => c.replacementText === 'cryptic',
+    );
+    expect(crypticItem?.allTokensWithinCap).toBe(false);
+    expect(crypticItem?.outTokens).toEqual(['cryptic']);
+  });
+
+  it('synthesizes freeParaphraseCandidates from freeSynonymCandidates when freeParaphrases is omitted', async () => {
+    const profile = buildTestProfile([
+      buildToken('The', ' ', 0),
+      buildToken('esoteric', ' ', 1, 'out'),
+      buildToken('test', ' ', 2),
+      buildToken('worked', '.', 3),
+    ]);
+    const verifierCtx = buildTestVerifierCtx([
+      'the',
+      'simple',
+      'test',
+      'worked',
+    ]);
+
+    mockedCallOpenRouterJson.mockResolvedValueOnce({
+      inListSynonyms: [{ replacementText: 'simple', baseForm: 'simple' }],
+      freeSynonyms: [
+        { replacementText: 'arcane', baseForm: 'arcane' },
+        { replacementText: 'cryptic', baseForm: 'cryptic' },
+        { replacementText: 'obscure', baseForm: 'obscure' },
+      ],
+      inListParaphrases: [{ rewrittenText: 'The simple test worked.' }],
+      freeParaphrases: [],
+    });
+
+    const res = await suggestReplacementsAndParaphrases({
+      profile,
+      spanStartIdx: 1,
+      spanEndIdx: 1,
+      targetMaxLevel: 1,
+      verifierCtx,
+      config: TEST_CONFIG,
+    });
+
+    expect(mockedCallOpenRouterJson).toHaveBeenCalledTimes(1);
+    expect(res.freeParaphraseCandidates).toHaveLength(3);
+    expect(res.freeParaphraseCandidates.map((c) => c.rewrittenText)).toEqual([
+      'The arcane test worked.',
+      'The cryptic test worked.',
+      'The obscure test worked.',
+    ]);
+  });
+});

@@ -13,10 +13,19 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { extractEnclosingSentenceSpan } from '../../ai/lexiconVerifier';
+import {
+  extractEnclosingSentenceSpan,
+  splitSentenceAroundSpan,
+} from '../../ai/lexiconVerifier';
 import { copyTextSafe } from '../../io/docExporters';
 import { useProfilerStore } from '../../store/useProfilerStore';
-import { getActiveAiModelId, getActiveAiProvider } from '../../types/ai';
+import {
+  getActiveAiModelId,
+  getActiveAiProvider,
+  type AiSuggestionTrackFilter,
+  type VerifiedParaphraseCandidate,
+  type VerifiedSynonymCandidate,
+} from '../../types/ai';
 
 interface ModalDragState {
   pointerId: number;
@@ -45,6 +54,8 @@ export const AiSuggestionModal: React.FC = () => {
   const [offset, setOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [elapsedTenths, setElapsedTenths] = useState(0);
+  const [trackFilter, setTrackFilter] =
+    useState<AiSuggestionTrackFilter>('all');
   const cardRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<ModalDragState | null>(null);
 
@@ -61,6 +72,31 @@ export const AiSuggestionModal: React.FC = () => {
     }
     return '선택한 단어가 들어 있는 문장을 분석합니다.';
   }, [profile, result?.enclosingSentence, span]);
+
+  const canMapResultToProfile = Boolean(
+    result &&
+      profile &&
+      profile.sourceId === result.sourceId &&
+      profile.originalText === result.sourceOriginalText,
+  );
+
+  const highlightedContextParts = useMemo(() => {
+    if (canMapResultToProfile && profile && result) {
+      return splitSentenceAroundSpan(
+        profile,
+        result.spanStartIdx,
+        result.spanEndIdx,
+      );
+    }
+    if (!result && profile && span) {
+      return splitSentenceAroundSpan(
+        profile,
+        span.startTokenIdx,
+        span.endTokenIdx,
+      );
+    }
+    return null;
+  }, [canMapResultToProfile, profile, result, span]);
 
   const activeProviderLabel =
     getActiveAiProvider(store.openRouterConfig) === 'gemini'
@@ -106,6 +142,7 @@ export const AiSuggestionModal: React.FC = () => {
     if (!open) return;
     setOffset({ x: 0, y: 0 });
     setIsDragging(false);
+    setTrackFilter('all');
     dragRef.current = null;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') store.closeAiSuggestionModal();
@@ -174,14 +211,18 @@ export const AiSuggestionModal: React.FC = () => {
   const targetLabel = result?.targetText ?? span?.rawText ?? '선택 단어';
 
   const renderSynonymCard = (
-    cand: NonNullable<typeof result>['synonymCandidates'][number],
+    cand: VerifiedSynonymCandidate,
     idx: number,
+    keyPrefix: string,
   ) => {
     const swatch = cand.primaryListId
       ? refColorMap.get(cand.primaryListId)
       : undefined;
     return (
-      <div key={`syn-${idx}-${cand.replacementText}`} className="ai-result-card">
+      <div
+        key={`${keyPrefix}-syn-${idx}-${cand.replacementText}`}
+        className="ai-result-card"
+      >
         <div className="ai-card-top">
           <div className="ai-word-group">
             <span className="ai-row-index tabular-nums">{idx + 1}</span>
@@ -191,17 +232,35 @@ export const AiSuggestionModal: React.FC = () => {
               <span className="ai-relation-tag">원형: {cand.baseForm}</span>
             )}
           </div>
-          <span className="ai-level-badge" data-in-cap="true">
-            {swatch && (
-              <span
-                className="ai-swatch-dot"
-                style={{ backgroundColor: swatch }}
-              />
-            )}
-            {cand.highestLevelNumber !== null
-              ? `L${cand.highestLevelNumber} · ${cand.primaryListName}`
-              : cand.primaryListName}
-          </span>
+          {cand.allTokensWithinCap ? (
+            <span className="ai-level-badge" data-in-cap="true">
+              {swatch && (
+                <span
+                  className="ai-swatch-dot"
+                  style={{ backgroundColor: swatch }}
+                />
+              )}
+              {cand.highestLevelNumber !== null
+                ? `L${cand.highestLevelNumber} · ${cand.primaryListName}`
+                : cand.primaryListName === 'ignore_list'
+                  ? 'Ignored (예외 허용)'
+                  : cand.primaryListName}
+            </span>
+          ) : (
+            <span
+              className="ai-level-badge"
+              data-out="true"
+              title={
+                cand.outTokens.length > 0
+                  ? `활성 Word List 미등재: ${cand.outTokens.join(', ')}`
+                  : undefined
+              }
+            >
+              {cand.isMultiWord && cand.highestLevelNumber !== null
+                ? `부분 미등재 (${cand.outTokens.length}단어 Out)`
+                : '리스트 외 (Out)'}
+            </span>
+          )}
         </div>
         <p className="ai-card-note">
           {cand.meaningKo || cand.nuanceKo ? (
@@ -214,7 +273,35 @@ export const AiSuggestionModal: React.FC = () => {
             '문맥 대체 어휘'
           )}
         </p>
-        <div className="ai-preview-box">{cand.previewSentence}</div>
+        <div className="ai-preview-box">
+          {(() => {
+            const parts =
+              canMapResultToProfile && profile && result
+                ? splitSentenceAroundSpan(
+                    profile,
+                    result.spanStartIdx,
+                    result.spanEndIdx,
+                    cand.replacementText,
+                  )
+                : (() => {
+                    const m = cand.previewSentence.match(
+                      /^([\s\S]*?)\[([^\]]+)\]([\s\S]*)$/,
+                    );
+                    return m
+                      ? { before: m[1], focus: m[2], after: m[3] }
+                      : null;
+                  })();
+            return parts && parts.focus ? (
+              <>
+                {parts.before}
+                <mark className="ai-highlight-mark">{parts.focus}</mark>
+                {parts.after}
+              </>
+            ) : (
+              cand.previewSentence
+            );
+          })()}
+        </div>
         <div className="ai-card-actions">
           <button
             type="button"
@@ -249,10 +336,14 @@ export const AiSuggestionModal: React.FC = () => {
   };
 
   const renderParaphraseCard = (
-    cand: NonNullable<typeof result>['paraphraseCandidates'][number],
+    cand: VerifiedParaphraseCandidate,
     idx: number,
+    keyPrefix: string,
   ) => (
-    <div key={`para-${idx}-${cand.styleLabelKo}`} className="ai-result-card">
+    <div
+      key={`${keyPrefix}-para-${idx}-${cand.styleLabelKo}`}
+      className="ai-result-card"
+    >
       <div className="ai-card-top">
         <div className="ai-word-group">
           <span className="ai-row-index tabular-nums">{idx + 1}</span>
@@ -327,6 +418,86 @@ export const AiSuggestionModal: React.FC = () => {
     </div>
   );
 
+  const renderTrackSection = (options: {
+    trackKey: 'in_list' | 'free';
+    badgeText: string;
+    title: string;
+    subtitle: string;
+    wordHeading: string;
+    paraHeading: string;
+    synonyms: VerifiedSynonymCandidate[];
+    paraphrases: VerifiedParaphraseCandidate[];
+    emptyWordHint: string;
+    emptyParaHint: string;
+  }) => {
+    const rowCount = Math.max(
+      1,
+      options.synonyms.length,
+      options.paraphrases.length,
+    );
+    return (
+      <section className="ai-track-section" data-track={options.trackKey}>
+        <div className="ai-track-banner">
+          <div className="ai-track-banner-left">
+            <span className="ai-track-pill" data-track={options.trackKey}>
+              {options.badgeText}
+            </span>
+            <h3 className="ai-track-title">{options.title}</h3>
+          </div>
+          <span className="ai-track-sub">{options.subtitle}</span>
+        </div>
+
+        <div className="ai-modal-matrix">
+          <div className="ai-matrix-head-row">
+            <div className="ai-modal-column-head">
+              <h4>
+                <ArrowRightLeft size={16} /> {options.wordHeading}
+              </h4>
+              <span className="count-badge tabular-nums">
+                {options.synonyms.length}/3
+              </span>
+            </div>
+            <div className="ai-modal-column-head">
+              <h4>
+                <Wand2 size={16} /> {options.paraHeading}
+              </h4>
+              <span className="count-badge tabular-nums">
+                {options.paraphrases.length}/3
+              </span>
+            </div>
+          </div>
+
+          {Array.from({ length: rowCount }).map((_, idx) => {
+            const syn = options.synonyms[idx];
+            const para = options.paraphrases[idx];
+            return (
+              <div key={`${options.trackKey}-${idx}`} className="ai-matrix-pair-row">
+                {syn ? (
+                  renderSynonymCard(syn, idx, options.trackKey)
+                ) : (
+                  <div className="ai-empty-slot">
+                    {idx === 0 && options.synonyms.length === 0
+                      ? options.emptyWordHint
+                      : '추가 추천 단어 없음'}
+                  </div>
+                )}
+                {para ? (
+                  renderParaphraseCard(para, idx, options.trackKey)
+                ) : (
+                  <div className="ai-empty-slot">
+                    {idx === 0 && options.paraphrases.length === 0
+                      ? options.emptyParaHint
+                      : '추가 패러프레이즈 없음'}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    );
+  };
+
   return createPortal(
     <div
       className="modal-backdrop"
@@ -387,7 +558,19 @@ export const AiSuggestionModal: React.FC = () => {
 
         <div className="ai-modal-body">
           <div className="ai-modal-context">
-            <p className="ai-modal-sentence">{previewEnclosingSentence}</p>
+            <p className="ai-modal-sentence">
+              {highlightedContextParts && highlightedContextParts.focus ? (
+                <>
+                  {highlightedContextParts.before}
+                  <mark className="ai-highlight-mark">
+                    {highlightedContextParts.focus}
+                  </mark>
+                  {highlightedContextParts.after}
+                </>
+              ) : (
+                previewEnclosingSentence
+              )}
+            </p>
             <div className="ai-level-cap-note">
               검증 기준: 왼쪽 Reference Lists의 활성 단어장 전체 (
               {activeRefs.length > 0
@@ -434,8 +617,8 @@ export const AiSuggestionModal: React.FC = () => {
                         </span>
                       </div>
                       <span className="ai-loading-desc">
-                        추천 단어와 패러프레이즈 문장을 생성하고 활성 Word
-                        List와 대조하고 있습니다…
+                        Word List 내·외 추천 단어(3+3)와 패러프레이즈 문장(3+3)을
+                        생성하고 활성 Word List와 대조하고 있습니다…
                       </span>
                     </div>
                   </div>
@@ -498,70 +681,84 @@ export const AiSuggestionModal: React.FC = () => {
               </div>
             </div>
           ) : result ? (
-            <div className="ai-modal-matrix">
-              <div className="ai-matrix-head-row">
-                <div className="ai-modal-column-head">
-                  <h3>
-                    <ArrowRightLeft size={16} /> 추천 단어
-                  </h3>
-                  <span className="count-badge tabular-nums">
-                    {result.synonymCandidates.length}/3
-                  </span>
-                </div>
-                <div className="ai-modal-column-head">
-                  <h3>
-                    <Wand2 size={16} /> 패러프레이즈 문장
-                  </h3>
-                  <span className="count-badge tabular-nums">
-                    {result.paraphraseCandidates.length}/3
-                  </span>
+            <>
+              <div className="ai-track-filter-bar">
+                <div
+                  className="segmented-toggle"
+                  role="group"
+                  aria-label="추천 트랙 보기 필터"
+                >
+                  <button
+                    type="button"
+                    className="segmented-btn"
+                    data-active={trackFilter === 'all'}
+                    onClick={() => setTrackFilter('all')}
+                  >
+                    전체 보기 (단어{' '}
+                    {result.inListSynonymCandidates.length +
+                      result.freeSynonymCandidates.length}{' '}
+                    · 문장{' '}
+                    {result.inListParaphraseCandidates.length +
+                      result.freeParaphraseCandidates.length}
+                    )
+                  </button>
+                  <button
+                    type="button"
+                    className="segmented-btn"
+                    data-active={trackFilter === 'in_list'}
+                    onClick={() => setTrackFilter('in_list')}
+                  >
+                    Word List 내 ({result.inListSynonymCandidates.length} +{' '}
+                    {result.inListParaphraseCandidates.length})
+                  </button>
+                  <button
+                    type="button"
+                    className="segmented-btn"
+                    data-active={trackFilter === 'free'}
+                    onClick={() => setTrackFilter('free')}
+                  >
+                    Word List 외 확장 ({result.freeSynonymCandidates.length} +{' '}
+                    {result.freeParaphraseCandidates.length})
+                  </button>
                 </div>
               </div>
 
-              {result.synonymCandidates.length === 0 ? (
-                <div className="ai-matrix-fallback-cols">
-                  <div className="empty-hint-box">
-                    <span>
-                      활성 Word List 안에서 이 자리에 바로 넣을 수 있는 단어를
-                      찾지 못했습니다. 왼쪽에서 단어장을 추가해 보세요.
-                    </span>
-                  </div>
-                  <div className="ai-modal-column">
-                    {result.paraphraseCandidates.map((cand, idx) =>
-                      renderParaphraseCard(cand, idx),
-                    )}
-                  </div>
-                </div>
-              ) : (
-                Array.from({
-                  length: Math.max(
-                    result.synonymCandidates.length,
-                    result.paraphraseCandidates.length,
-                  ),
-                }).map((_, idx) => {
-                  const syn = result.synonymCandidates[idx];
-                  const para = result.paraphraseCandidates[idx];
-                  return (
-                    <div key={idx} className="ai-matrix-pair-row">
-                      {syn ? (
-                        renderSynonymCard(syn, idx)
-                      ) : (
-                        <div className="ai-empty-slot" aria-hidden="true">
-                          추가 추천 단어 없음
-                        </div>
-                      )}
-                      {para ? (
-                        renderParaphraseCard(para, idx)
-                      ) : (
-                        <div className="ai-empty-slot" aria-hidden="true">
-                          추가 패러프레이즈 없음
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
+              <div className="ai-modal-tracks">
+                {(trackFilter === 'all' || trackFilter === 'in_list') &&
+                  renderTrackSection({
+                    trackKey: 'in_list',
+                    badgeText: 'Word List 내',
+                    title: '활성 단어장 범위 추천',
+                    subtitle:
+                      '왼쪽 활성 Word List 어휘만으로 검증된 대체 단어와 패러프레이즈입니다.',
+                    wordHeading: 'Word List 내 추천 단어',
+                    paraHeading: 'Word List 내 패러프레이즈',
+                    synonyms: result.inListSynonymCandidates,
+                    paraphrases: result.inListParaphraseCandidates,
+                    emptyWordHint:
+                      '활성 Word List 안에서 이 자리에 바로 넣을 수 있는 단어를 찾지 못했습니다.',
+                    emptyParaHint:
+                      '활성 Word List 내 패러프레이즈를 생성하지 못했습니다.',
+                  })}
+
+                {(trackFilter === 'all' || trackFilter === 'free') &&
+                  renderTrackSection({
+                    trackKey: 'free',
+                    badgeText: 'Word List 외 허용',
+                    title: '자유·확장 대체 추천',
+                    subtitle:
+                      'Word List 밖의 어휘도 허용하여 문맥상 자연스럽고 풍부하게 표현한 대안입니다.',
+                    wordHeading: '리스트 외 대체 가능 단어',
+                    paraHeading: '리스트 외 포함 패러프레이즈',
+                    synonyms: result.freeSynonymCandidates,
+                    paraphrases: result.freeParaphraseCandidates,
+                    emptyWordHint:
+                      '중복 없이 추가 제안할 자유 대체 단어가 없습니다.',
+                    emptyParaHint:
+                      '중복 없이 추가 제안할 확장 패러프레이즈 문장이 없습니다.',
+                  })}
+              </div>
+            </>
           ) : (
             !store.aiError && (
               <div className="empty-hint-box">

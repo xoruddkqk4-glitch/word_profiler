@@ -183,6 +183,8 @@ export interface MorphologyAnalysisResult {
   candidates: VerifiedMorphCandidate[];
 }
 
+export type AiSuggestionTrackFilter = 'all' | 'in_list' | 'free';
+
 export interface VerifiedSynonymCandidate {
   replacementText: string;
   baseForm: string;
@@ -191,6 +193,7 @@ export interface VerifiedSynonymCandidate {
   isMultiWord: boolean;
   allTokensWithinCap: boolean;
   allTokensInActiveLists: boolean;
+  outTokens: string[];
   highestLevelNumber: number | null;
   primaryListId: string | null;
   primaryListName: string;
@@ -233,7 +236,17 @@ export interface CombinedSuggestionResult {
   sourceOriginalText: string;
   /** Source id of the profile (`__inline__` or file id). */
   sourceId: string;
+  /** Group A: up to 3 replacement words strictly inside active Word Lists. */
+  inListSynonymCandidates: VerifiedSynonymCandidate[];
+  /** Group B: up to 3 natural replacement words allowed outside Word Lists. */
+  freeSynonymCandidates: VerifiedSynonymCandidate[];
+  /** Group C: up to 3 paraphrases prioritizing 100% active Word List coverage. */
+  inListParaphraseCandidates: VerifiedParaphraseCandidate[];
+  /** Group D: up to 3 natural paraphrases freely including out-of-list vocabulary. */
+  freeParaphraseCandidates: VerifiedParaphraseCandidate[];
+  /** Backward-compatible alias equal to `inListSynonymCandidates`. */
   synonymCandidates: VerifiedSynonymCandidate[];
+  /** Backward-compatible alias equal to `inListParaphraseCandidates`. */
   paraphraseCandidates: VerifiedParaphraseCandidate[];
   paraphraseSpanStartIdx: number;
   paraphraseSpanEndIdx: number;

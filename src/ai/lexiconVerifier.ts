@@ -448,6 +448,62 @@ export function buildSentencePreviewForSpan(
   return out;
 }
 
+export interface HighlightedSentenceParts {
+  before: string;
+  focus: string;
+  after: string;
+}
+
+/**
+ * Splits the enclosing sentence of `tokens[spanStartIdx..spanEndIdx]` into
+ * `{ before, focus, after }` using exact token indices so duplicate words
+ * elsewhere in the sentence are never mis-highlighted.
+ */
+export function splitSentenceAroundSpan(
+  profile: DocumentProfileResult,
+  spanStartIdx: number,
+  spanEndIdx: number,
+  replacementText?: string,
+): HighlightedSentenceParts {
+  const tokens = profile.tokens;
+  if (tokens.length === 0) {
+    return { before: '', focus: replacementText?.trim() ?? '', after: '' };
+  }
+
+  const lo = Math.max(0, Math.min(spanStartIdx, tokens.length - 1));
+  const hi = Math.max(lo, Math.min(spanEndIdx, tokens.length - 1));
+  const enclosing = extractEnclosingSentenceSpan(profile, lo, hi);
+
+  let before = '';
+  for (let i = enclosing.startTokenIdx; i < lo; i++) {
+    before += tokens[i].token + tokens[i].trailingWs;
+  }
+
+  const focus =
+    replacementText !== undefined
+      ? matchSurfaceCapitalization(tokens[lo].token, replacementText)
+      : sliceProfileSpanText(profile, lo, hi, false);
+
+  let after = '';
+  if (hi < enclosing.endTokenIdx) {
+    after += tokens[hi].trailingWs;
+    for (let i = hi + 1; i <= enclosing.endTokenIdx; i++) {
+      after += tokens[i].token;
+      if (i < enclosing.endTokenIdx) {
+        after += tokens[i].trailingWs;
+      } else {
+        const m = tokens[i].trailingWs.match(/^([.?!]+["'”’)\]}]*)/);
+        if (m) after += m[1];
+      }
+    }
+  } else {
+    const m = tokens[hi].trailingWs.match(/^([.?!]+["'”’)\]}]*)/);
+    if (m) after += m[1];
+  }
+
+  return { before, focus, after };
+}
+
 export function collectSpanLexicalGuidance(
   profile: DocumentProfileResult,
   startIdx: number,

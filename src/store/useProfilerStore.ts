@@ -2179,7 +2179,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       const activeProvider = getActiveAiProvider(st.openRouterConfig);
       const activeModelId = getActiveAiModelId(st.openRouterConfig);
       const textSig = `${sourceOriginalText.length}:${sourceOriginalText.slice(0, 64)}:${sourceOriginalText.slice(-64)}`;
-      const cacheKey = `${sourceId}|${textSig}|${span.startTokenIdx}:${span.endTokenIdx}|${activeProvider}:${activeModelId}|${verifierCtx.cacheKey}`;
+      const cacheKey = `v2|${sourceId}|${textSig}|${span.startTokenIdx}:${span.endTokenIdx}|${activeProvider}:${activeModelId}|${verifierCtx.cacheKey}`;
 
       if (options?.forceRefresh !== true) {
         const cached = aiSuggestionCache.get(cacheKey);

@@ -52,8 +52,8 @@ export const AiLexicalPanel: React.FC = () => {
           </h4>
           <p className="ai-onboarding-desc">
             별도 서버 없이 브라우저에서 무료 Google Gemini API 또는 OpenRouter
-            모델을 직접 호출하여 Word List 안의 추천 단어와 패러프레이즈 문장을
-            만듭니다.
+            모델을 직접 호출하여 Word List 내·외 추천 단어(3+3)와 패러프레이즈
+            문장(3+3)을 만듭니다.
           </p>
           <button
             type="button"
@@ -109,8 +109,8 @@ export const AiLexicalPanel: React.FC = () => {
           <Sparkles size={16} />
           <span>
             {isMultiWordSpan
-              ? '선택 표현 AI 추천 (단어 3 + 문장 3)'
-              : 'AI 추천 (단어 3 + 문장 3)'}
+              ? '선택 표현 AI 추천 (단어 3+3 · 문장 3+3)'
+              : 'AI 추천 (단어 3+3 · 문장 3+3)'}
           </span>
         </button>
 
@@ -251,8 +251,8 @@ export const AiLexicalPanel: React.FC = () => {
             <span>
               선택: <strong>&ldquo;{span.rawText}&rdquo;</strong>
               <br />
-              AI 추천 버튼을 누르면 Word List 단어만으로 된 추천 단어 3개와
-              패러프레이즈 문장 3개를 모달에서 함께 확인할 수 있습니다.
+              AI 추천 버튼을 누르면 Word List 내·외 추천 단어(3+3)와 패러프레이즈
+              문장(3+3)을 모달에서 함께 확인할 수 있습니다.
             </span>
           </div>
         )}
