@@ -33,6 +33,7 @@ import {
   readWordlistFilesFromBrowser,
 } from '../../io/fileReaders';
 import { exportLevelGroupsArchive } from '../../io/listExporters';
+import { getActiveAiProvider, hasActiveAiApiKey } from '../../types/ai';
 import {
   exportSettingsFile,
   parseSettingsFileContent,
@@ -767,10 +768,14 @@ export const TopMenuBar: React.FC = () => {
                   }}
                 >
                   <span className="menu-item-left">
-                    <Sparkles size={14} /> AI Assistant (OpenRouter)...
+                    <Sparkles size={14} /> AI Assistant (Gemini / OpenRouter)...
                   </span>
                   <span className="menu-shortcut">
-                    {store.openRouterConfig.apiKey.trim() ? '연결됨' : '미설정'}
+                    {hasActiveAiApiKey(store.openRouterConfig)
+                      ? getActiveAiProvider(store.openRouterConfig) === 'gemini'
+                        ? 'Gemini 연결됨'
+                        : 'OpenRouter 연결됨'
+                      : '미설정'}
                   </span>
                 </button>
                 <div className="menu-divider" />

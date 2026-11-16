@@ -10,6 +10,7 @@ import {
 import { resolveTokenHighlight } from '../../core/colorPalette';
 import { copyTextSafe } from '../../io/docExporters';
 import { useProfilerStore } from '../../store/useProfilerStore';
+import { hasActiveAiApiKey } from '../../types/ai';
 import type { ProfileToken } from '../../types/domain';
 
 interface ContextMenuState {
@@ -273,8 +274,10 @@ export const HighlightedTextView: React.FC = () => {
                   setCtxMenu(null);
                   store.selectTokenInstance(idx);
                   store.setInspectorTab('ai');
-                  if (store.openRouterConfig.apiKey.trim()) {
+                  if (hasActiveAiApiKey(store.openRouterConfig)) {
                     void store.runAiMorphologyCheck();
+                  } else {
+                    store.setSettingsModalOpen(true, 'ai');
                   }
                 }}
               >

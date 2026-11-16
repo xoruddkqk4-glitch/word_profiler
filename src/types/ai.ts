@@ -1,19 +1,64 @@
 export type ApiKeyStorageMode = 'session' | 'local';
 
+export type AiProviderId = 'gemini' | 'openrouter';
+
 export type InspectorBodyTab = 'ai' | 'ignore';
 
 export type SettingsSectionId = 'display' | 'word' | 'ai';
 
 export interface OpenRouterConfig {
+  provider?: AiProviderId;
   apiKey: string;
   storageMode: ApiKeyStorageMode;
   modelId: string;
+  geminiApiKey?: string;
+  geminiModelId?: string;
 }
 
 export interface RecommendedModelOption {
   id: string;
   label: string;
 }
+
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
+
+export const GEMINI_OVERLOAD_FALLBACK_MODELS: readonly string[] = [
+  'gemini-3.5-flash-lite',
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-flash-latest',
+];
+
+export const RECOMMENDED_GEMINI_MODELS: RecommendedModelOption[] = [
+  {
+    id: 'gemini-3.8-flash',
+    label: 'Google: Gemini 3.8 Flash (빠름 · 무료 티어 권장)',
+  },
+  {
+    id: 'gemini-3.5-flash-lite',
+    label: 'Google: Gemini 3.5 Flash-Lite (초고속 · 혼잡 적음 · 무료 한도 넉넉함)',
+  },
+  {
+    id: 'gemini-flash-latest',
+    label: 'Google: Gemini Flash Latest (최신 안정 Flash 자동 연결)',
+  },
+  {
+    id: 'gemini-2.5-flash',
+    label: 'Google: Gemini 2.5 Flash (안정 호환 · 무료 지원)',
+  },
+  {
+    id: 'gemini-4-hydrogen',
+    label: 'Google: Gemini 4 Hydrogen (차세대 고속 · 고성능)',
+  },
+  {
+    id: 'gemini-4-argon',
+    label: 'Google: Gemini 4 Argon (고품질 정밀 분석)',
+  },
+  {
+    id: 'gemini-2.5-flash-lite',
+    label: 'Google: Gemini 2.5 Flash-Lite (경량 호환)',
+  },
+];
 
 export const DEFAULT_OPENROUTER_MODEL = 'google/gemini-3.8-flash';
 
@@ -64,6 +109,33 @@ export const RECOMMENDED_OPENROUTER_MODELS: RecommendedModelOption[] = [
     label: 'Google: Gemini 4 Argon (고품질)',
   },
 ];
+
+export function normalizeGeminiModelId(raw: string | null | undefined): string {
+  const cleaned = (typeof raw === 'string' ? raw : '')
+    .trim()
+    .replace(/^(?:models\/|google\/)/i, '');
+  return cleaned || DEFAULT_GEMINI_MODEL;
+}
+
+export function getActiveAiProvider(config: OpenRouterConfig): AiProviderId {
+  return config.provider === 'gemini' ? 'gemini' : 'openrouter';
+}
+
+export function getActiveAiApiKey(config: OpenRouterConfig): string {
+  return getActiveAiProvider(config) === 'gemini'
+    ? (config.geminiApiKey ?? '').trim()
+    : config.apiKey.trim();
+}
+
+export function getActiveAiModelId(config: OpenRouterConfig): string {
+  return getActiveAiProvider(config) === 'gemini'
+    ? normalizeGeminiModelId(config.geminiModelId)
+    : config.modelId.trim() || DEFAULT_OPENROUTER_MODEL;
+}
+
+export function hasActiveAiApiKey(config: OpenRouterConfig): boolean {
+  return Boolean(getActiveAiApiKey(config));
+}
 
 export interface TokenSpanSelection {
   /** 0-based inclusive start index into DocumentProfileResult.tokens */

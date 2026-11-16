@@ -13,8 +13,10 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
+import { extractEnclosingSentenceSpan } from '../../ai/lexiconVerifier';
 import { copyTextSafe } from '../../io/docExporters';
 import { useProfilerStore } from '../../store/useProfilerStore';
+import { getActiveAiModelId, getActiveAiProvider } from '../../types/ai';
 
 interface ModalDragState {
   pointerId: number;
@@ -42,8 +44,41 @@ export const AiSuggestionModal: React.FC = () => {
 
   const [offset, setOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [elapsedTenths, setElapsedTenths] = useState(0);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<ModalDragState | null>(null);
+
+  const previewEnclosingSentence = useMemo(() => {
+    if (result?.enclosingSentence) return result.enclosingSentence;
+    if (profile && span) {
+      return (
+        extractEnclosingSentenceSpan(
+          profile,
+          span.startTokenIdx,
+          span.endTokenIdx,
+        ).sentenceWithPunct || '선택한 단어가 들어 있는 문장을 분석합니다.'
+      );
+    }
+    return '선택한 단어가 들어 있는 문장을 분석합니다.';
+  }, [profile, result?.enclosingSentence, span]);
+
+  const activeProviderLabel =
+    getActiveAiProvider(store.openRouterConfig) === 'gemini'
+      ? 'Gemini'
+      : 'OpenRouter';
+  const activeModelLabel = getActiveAiModelId(store.openRouterConfig);
+
+  useEffect(() => {
+    if (!open || !store.aiLoading) {
+      setElapsedTenths(0);
+      return;
+    }
+    const startedAt = performance.now();
+    const id = window.setInterval(() => {
+      setElapsedTenths(Math.floor((performance.now() - startedAt) / 100));
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [open, store.aiLoading]);
 
   const activeRefs = useMemo(
     () => store.referenceLists.filter((r) => r.enabled),
@@ -352,10 +387,7 @@ export const AiSuggestionModal: React.FC = () => {
 
         <div className="ai-modal-body">
           <div className="ai-modal-context">
-            <p className="ai-modal-sentence">
-              {result?.enclosingSentence ??
-                '선택한 단어가 들어 있는 문장을 분석합니다.'}
-            </p>
+            <p className="ai-modal-sentence">{previewEnclosingSentence}</p>
             <div className="ai-level-cap-note">
               검증 기준: 왼쪽 Reference Lists의 활성 단어장 전체 (
               {activeRefs.length > 0
@@ -382,19 +414,88 @@ export const AiSuggestionModal: React.FC = () => {
           )}
 
           {store.aiLoading ? (
-            <div className="ai-modal-loading">
-              <Loader2 size={24} className="ai-spin" />
-              <span>
-                추천 단어와 패러프레이즈 문장을 함께 만들고 Word List와 대조하는
-                중…
-              </span>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={store.cancelAiRequest}
-              >
-                취소
-              </button>
+            <div className="ai-loading-stage" role="status" aria-live="polite">
+              <div className="ai-loading-hero">
+                <div className="ai-loading-head">
+                  <div className="ai-loading-status-left">
+                    <Loader2 size={28} className="ai-spin" />
+                    <div className="ai-loading-titles">
+                      <div className="ai-loading-badges">
+                        <span className="ai-live-badge">
+                          <span className="ai-live-dot" aria-hidden="true" />
+                          실시간 생성 중
+                        </span>
+                        <span className="ai-loading-model-tag">
+                          {activeProviderLabel} ·{' '}
+                          <span className="mono">{activeModelLabel}</span>
+                        </span>
+                        <span className="ai-elapsed-pill tabular-nums">
+                          {(elapsedTenths / 10).toFixed(1)}초
+                        </span>
+                      </div>
+                      <span className="ai-loading-desc">
+                        추천 단어와 패러프레이즈 문장을 생성하고 활성 Word
+                        List와 대조하고 있습니다…
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={store.cancelAiRequest}
+                  >
+                    취소
+                  </button>
+                </div>
+
+                <div className="ai-loading-bar-track" aria-hidden="true">
+                  <div className="ai-loading-bar-fill" />
+                </div>
+
+                <div className="ai-loading-steps">
+                  <span className="ai-loading-step" data-state="done">
+                    1. 문맥 문장 추출 완료
+                  </span>
+                  <span className="ai-loading-step" data-state="active">
+                    2. AI 추천 어휘·패러프레이즈 생성 중
+                  </span>
+                  <span className="ai-loading-step" data-state="pending">
+                    3. 활성 Word List 로컬 대조 검증
+                  </span>
+                </div>
+              </div>
+
+              <div className="ai-loading-skeleton-grid" aria-hidden="true">
+                <div className="ai-matrix-head-row">
+                  <div className="ai-modal-column-head">
+                    <h3>
+                      <ArrowRightLeft size={16} /> 추천 단어
+                    </h3>
+                    <span className="count-badge">준비 중</span>
+                  </div>
+                  <div className="ai-modal-column-head">
+                    <h3>
+                      <Wand2 size={16} /> 패러프레이즈 문장
+                    </h3>
+                    <span className="count-badge">준비 중</span>
+                  </div>
+                </div>
+
+                {[0, 1].map((row) => (
+                  <div key={row} className="ai-matrix-pair-row">
+                    <div className="ai-skeleton-card">
+                      <div className="ai-skeleton-box ai-skeleton-line ai-skeleton-title" />
+                      <div className="ai-skeleton-box ai-skeleton-line ai-skeleton-sub" />
+                      <div className="ai-skeleton-box ai-skeleton-preview" />
+                    </div>
+                    <div className="ai-skeleton-card">
+                      <div className="ai-skeleton-box ai-skeleton-line ai-skeleton-title" />
+                      <div className="ai-skeleton-box ai-skeleton-line ai-skeleton-sub" />
+                      <div className="ai-skeleton-box ai-skeleton-preview" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : result ? (
             <div className="ai-modal-matrix">

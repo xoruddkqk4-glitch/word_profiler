@@ -1,24 +1,101 @@
 import {
+  DEFAULT_GEMINI_MODEL,
   DEFAULT_OPENROUTER_MODEL,
+  GEMINI_OVERLOAD_FALLBACK_MODELS,
   RETIRED_OPENROUTER_MODELS,
+  getActiveAiApiKey,
+  getActiveAiModelId,
+  getActiveAiProvider,
+  normalizeGeminiModelId,
+  type AiProviderId,
   type ApiKeyStorageMode,
   type OpenRouterConfig,
 } from '../types/ai';
 
 const META_STORAGE_KEY = 'antwordprofiler_openrouter_meta_v1';
 const KEY_STORAGE_KEY = 'antwordprofiler_openrouter_key_v1';
+const GEMINI_KEY_STORAGE_KEY = 'antwordprofiler_gemini_key_v1';
 const OPENROUTER_CHAT_ENDPOINT =
   'https://openrouter.ai/api/v1/chat/completions';
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const GEMINI_OVERLOAD_COOLDOWN_MS = 60_000;
+const GEMINI_ATTEMPT_TIMEOUT_MS = 7_500;
 
 const fastParamsUnsupportedModels = new Set<string>();
+const geminiNoFastThinkingModels = new Set<string>();
+const geminiOverloadedUntil = new Map<string, number>();
 
 export function resetOpenRouterCompatibilityCache(): void {
   fastParamsUnsupportedModels.clear();
+  geminiNoFastThinkingModels.clear();
+  geminiOverloadedUntil.clear();
+}
+
+function isTransientOverloadStatus(status: number): boolean {
+  return (
+    status === 503 ||
+    status === 502 ||
+    status === 504 ||
+    status === 500 ||
+    status === 429
+  );
+}
+
+function sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 interface StoredMeta {
+  provider?: AiProviderId;
   storageMode: ApiKeyStorageMode;
   modelId: string;
+  geminiModelId?: string;
+}
+
+function readStorageKey(mode: ApiKeyStorageMode, storageKey: string): string {
+  try {
+    return (
+      (mode === 'local'
+        ? window.localStorage.getItem(storageKey)
+        : window.sessionStorage.getItem(storageKey)) ?? ''
+    );
+  } catch {
+    return '';
+  }
+}
+
+function writeStorageKey(
+  mode: ApiKeyStorageMode,
+  storageKey: string,
+  value: string,
+): void {
+  try {
+    if (!value) {
+      window.sessionStorage.removeItem(storageKey);
+      window.localStorage.removeItem(storageKey);
+    } else if (mode === 'local') {
+      window.localStorage.setItem(storageKey, value);
+      window.sessionStorage.removeItem(storageKey);
+    } else {
+      window.sessionStorage.setItem(storageKey, value);
+      window.localStorage.removeItem(storageKey);
+    }
+  } catch {
+    // ignore storage restriction errors
+  }
 }
 
 /** Keep still-valid stored models; only retire deleted OpenRouter slugs. */
@@ -36,20 +113,28 @@ export function resolveStoredOpenRouterModelId(
 export function loadOpenRouterConfig(): OpenRouterConfig {
   if (typeof window === 'undefined') {
     return {
+      provider: 'gemini',
       apiKey: '',
       storageMode: 'session',
       modelId: DEFAULT_OPENROUTER_MODEL,
+      geminiApiKey: '',
+      geminiModelId: DEFAULT_GEMINI_MODEL,
     };
   }
 
+  let storedProvider: AiProviderId | undefined;
   let storageMode: ApiKeyStorageMode = 'session';
   let modelId = DEFAULT_OPENROUTER_MODEL;
+  let geminiModelId = DEFAULT_GEMINI_MODEL;
   let persistedModelId: string | null = null;
 
   try {
     const rawMeta = window.localStorage.getItem(META_STORAGE_KEY);
     if (rawMeta) {
       const parsed = JSON.parse(rawMeta) as Partial<StoredMeta>;
+      if (parsed.provider === 'gemini' || parsed.provider === 'openrouter') {
+        storedProvider = parsed.provider;
+      }
       if (parsed.storageMode === 'local' || parsed.storageMode === 'session') {
         storageMode = parsed.storageMode;
       }
@@ -57,71 +142,79 @@ export function loadOpenRouterConfig(): OpenRouterConfig {
         persistedModelId = parsed.modelId.trim();
         modelId = resolveStoredOpenRouterModelId(persistedModelId);
       }
+      if (
+        typeof parsed.geminiModelId === 'string' &&
+        parsed.geminiModelId.trim()
+      ) {
+        geminiModelId = normalizeGeminiModelId(parsed.geminiModelId);
+      }
     }
   } catch {
     // ignore storage read failure
   }
 
+  const apiKey = readStorageKey(storageMode, KEY_STORAGE_KEY).trim();
+  const geminiApiKey = readStorageKey(storageMode, GEMINI_KEY_STORAGE_KEY).trim();
+
+  const provider: AiProviderId =
+    storedProvider ?? (apiKey && !geminiApiKey ? 'openrouter' : 'gemini');
+
   // Persist retirement migration so UI and disk stay aligned.
   if (persistedModelId && persistedModelId !== modelId) {
     try {
-      const meta: StoredMeta = { storageMode, modelId };
+      const meta: StoredMeta = {
+        provider,
+        storageMode,
+        modelId,
+        geminiModelId,
+      };
       window.localStorage.setItem(META_STORAGE_KEY, JSON.stringify(meta));
     } catch {
       // ignore quota errors
     }
   }
 
-  let apiKey = '';
-  try {
-    apiKey =
-      storageMode === 'local'
-        ? window.localStorage.getItem(KEY_STORAGE_KEY) ?? ''
-        : window.sessionStorage.getItem(KEY_STORAGE_KEY) ?? '';
-  } catch {
-    apiKey = '';
-  }
-
   return {
-    apiKey: apiKey.trim(),
+    provider,
+    apiKey,
     storageMode,
     modelId,
+    geminiApiKey,
+    geminiModelId,
   };
 }
 
 export function saveOpenRouterConfig(config: OpenRouterConfig): OpenRouterConfig {
+  const provider: AiProviderId = getActiveAiProvider(config);
   const normalized: OpenRouterConfig = {
+    provider,
     apiKey: config.apiKey.trim(),
     storageMode: config.storageMode,
     modelId: config.modelId.trim() || DEFAULT_OPENROUTER_MODEL,
+    geminiApiKey: (config.geminiApiKey ?? '').trim(),
+    geminiModelId: normalizeGeminiModelId(config.geminiModelId),
   };
 
   if (typeof window === 'undefined') return normalized;
 
   try {
     const meta: StoredMeta = {
+      provider: normalized.provider,
       storageMode: normalized.storageMode,
       modelId: normalized.modelId,
+      geminiModelId: normalized.geminiModelId,
     };
     window.localStorage.setItem(META_STORAGE_KEY, JSON.stringify(meta));
   } catch {
     // ignore quota errors
   }
 
-  try {
-    if (!normalized.apiKey) {
-      window.sessionStorage.removeItem(KEY_STORAGE_KEY);
-      window.localStorage.removeItem(KEY_STORAGE_KEY);
-    } else if (normalized.storageMode === 'local') {
-      window.localStorage.setItem(KEY_STORAGE_KEY, normalized.apiKey);
-      window.sessionStorage.removeItem(KEY_STORAGE_KEY);
-    } else {
-      window.sessionStorage.setItem(KEY_STORAGE_KEY, normalized.apiKey);
-      window.localStorage.removeItem(KEY_STORAGE_KEY);
-    }
-  } catch {
-    // ignore storage restriction errors
-  }
+  writeStorageKey(normalized.storageMode, KEY_STORAGE_KEY, normalized.apiKey);
+  writeStorageKey(
+    normalized.storageMode,
+    GEMINI_KEY_STORAGE_KEY,
+    normalized.geminiApiKey ?? '',
+  );
 
   return normalized;
 }
@@ -130,6 +223,10 @@ export function clearOpenRouterApiKey(
   current: OpenRouterConfig,
 ): OpenRouterConfig {
   return saveOpenRouterConfig({ ...current, apiKey: '' });
+}
+
+export function clearGeminiApiKey(current: OpenRouterConfig): OpenRouterConfig {
+  return saveOpenRouterConfig({ ...current, geminiApiKey: '' });
 }
 
 export interface ChatMessage {
@@ -364,6 +461,9 @@ function formatOpenRouterError(status: number, detail: string): string {
   if (status === 429) {
     return 'OpenRouter 요청 한도(Rate Limit)에 도달했습니다. 잠시 후 다시 시도하거나 다른 모델을 선택해 주세요.';
   }
+  if (status === 503 || status === 502 || status === 504) {
+    return `OpenRouter 또는 연결된 모델 서버가 일시적으로 혼잡합니다 (HTTP ${status}). 잠시 후 다시 시도하거나 다른 모델을 선택해 주세요.`;
+  }
   return detail
     ? `OpenRouter API 오류 (${status}): ${detail}`
     : `OpenRouter API 호출에 실패했습니다 (HTTP ${status}).`;
@@ -403,7 +503,7 @@ async function sendChatCompletionRequest(params: {
 
   if (useFastParams) {
     body.response_format = { type: 'json_object' };
-    body.reasoning = { effort: 'minimal', exclude: true };
+    body.reasoning = { effort: 'low', exclude: true };
     body.provider = { sort: 'throughput', allow_fallbacks: true };
   }
 
@@ -458,6 +558,473 @@ async function sendChatCompletionRequest(params: {
   };
 }
 
+interface GeminiRawResponse {
+  candidates?: {
+    finishReason?: string;
+    content?: {
+      parts?: { text?: string; thought?: boolean }[];
+    };
+  }[];
+  promptFeedback?: {
+    blockReason?: string;
+  };
+  error?: {
+    code?: number;
+    message?: string;
+    status?: string;
+  };
+}
+
+function formatGeminiError(status: number, detail: string): string {
+  if (
+    status === 401 ||
+    status === 403 ||
+    (status === 400 && /api[_ ]?key|API_KEY_INVALID|key not valid/i.test(detail))
+  ) {
+    return 'Google Gemini API 키가 유효하지 않습니다. Google AI Studio(aistudio.google.com)에서 발급한 키인지 확인해 주세요.';
+  }
+  if (status === 404) {
+    return `선택한 Gemini 모델 ID를 찾을 수 없습니다 (${detail || '404'}). 모델 이름을 확인해 주세요.`;
+  }
+  if (status === 429) {
+    return 'Gemini API 요청 한도(무료 티어 분당/일일 할당량)에 도달했습니다. 잠시 후 다시 시도하거나 gemini-3.5-flash-lite 모델을 선택해 보세요.';
+  }
+  if (status === 503 || status === 502 || status === 504) {
+    return 'Google Gemini 서버에 일시적인 요청 폭주(HTTP 503)가 발생했습니다. 자동 재시도 및 백업 경량 모델 우회도 모두 혼잡 상태이니 10~30초 후 다시 시도해 주세요.';
+  }
+  return detail
+    ? `Gemini API 오류 (${status}): ${detail}`
+    : `Gemini API 호출에 실패했습니다 (HTTP ${status}).`;
+}
+
+function buildGeminiFastThinkingConfig(
+  modelId: string,
+): Record<string, unknown> {
+  if (/^gemini-2\.5/i.test(modelId)) {
+    return { thinkingBudget: 0 };
+  }
+  return { thinkingLevel: 'LOW' };
+}
+
+function withAttemptTimeout(
+  parentSignal: AbortSignal | undefined,
+  timeoutMs: number,
+): {
+  signal: AbortSignal;
+  didTimeout: () => boolean;
+  cleanup: () => void;
+} {
+  const controller = new AbortController();
+  let timedOut = false;
+
+  const onParentAbort = () => {
+    controller.abort(parentSignal?.reason);
+  };
+  if (parentSignal?.aborted) {
+    controller.abort(parentSignal.reason);
+  } else {
+    parentSignal?.addEventListener('abort', onParentAbort, { once: true });
+  }
+
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    cleanup: () => {
+      clearTimeout(timer);
+      parentSignal?.removeEventListener('abort', onParentAbort);
+    },
+  };
+}
+
+async function sendGeminiGenerateContentRequest(params: {
+  apiKey: string;
+  modelId: string;
+  messages: ChatMessage[];
+  temperature?: number;
+  maxTokens?: number;
+  configMode: 'fast' | 'jsonOnly' | 'plain';
+  signal?: AbortSignal;
+}): Promise<
+  | { ok: true; content: string; finishReason: string | null }
+  | { ok: false; status: number; detail: string }
+> {
+  const {
+    apiKey,
+    modelId,
+    messages,
+    temperature = 0.2,
+    maxTokens = 2048,
+    configMode,
+    signal,
+  } = params;
+
+  const systemParts: string[] = [];
+  const contents: { role: 'user' | 'model'; parts: { text: string }[] }[] = [];
+  for (const m of messages) {
+    if (m.role === 'system') {
+      if (m.content.trim()) systemParts.push(m.content);
+    } else {
+      contents.push({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      });
+    }
+  }
+  const systemText = systemParts.join('\n\n').trim();
+  if (contents.length === 0) {
+    contents.push({
+      role: 'user',
+      parts: [{ text: systemText || 'Hello' }],
+    });
+  }
+
+  const generationConfig: Record<string, unknown> = {
+    temperature,
+    maxOutputTokens: maxTokens,
+  };
+  if (configMode === 'fast') {
+    generationConfig.responseMimeType = 'application/json';
+    generationConfig.thinkingConfig = buildGeminiFastThinkingConfig(modelId);
+  } else if (configMode === 'jsonOnly') {
+    generationConfig.responseMimeType = 'application/json';
+  }
+
+  const body: Record<string, unknown> = {
+    contents,
+    generationConfig,
+  };
+  if (systemText && !(messages.every((m) => m.role === 'system'))) {
+    body.systemInstruction = { parts: [{ text: systemText }] };
+  }
+
+  const url = `${GEMINI_API_BASE}/${encodeURIComponent(modelId)}:generateContent`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  let payload: GeminiRawResponse | null = null;
+  try {
+    payload = (await res.json()) as GeminiRawResponse;
+  } catch {
+    payload = null;
+  }
+
+  if (!res.ok) {
+    const detail = payload?.error?.message ?? res.statusText ?? '';
+    return { ok: false, status: res.status, detail };
+  }
+
+  if (payload?.error?.message) {
+    return {
+      ok: false,
+      status: Number(payload.error.code) || 500,
+      detail: payload.error.message,
+    };
+  }
+
+  const candidate = payload?.candidates?.[0];
+  if (!candidate && payload?.promptFeedback?.blockReason) {
+    return {
+      ok: false,
+      status: 400,
+      detail: `응답이 안전 필터에 의해 차단되었습니다 (${payload.promptFeedback.blockReason}).`,
+    };
+  }
+
+  const parts = candidate?.content?.parts ?? [];
+  const visibleText = parts
+    .filter((p) => !p?.thought && typeof p?.text === 'string')
+    .map((p) => p.text as string)
+    .join('');
+  const text =
+    visibleText ||
+    parts
+      .map((p) => (typeof p?.text === 'string' ? p.text : ''))
+      .join('');
+
+  const rawFinish = candidate?.finishReason;
+  const finishReason =
+    rawFinish === 'MAX_TOKENS'
+      ? 'length'
+      : typeof rawFinish === 'string'
+        ? rawFinish.toLowerCase()
+        : null;
+
+  return { ok: true, content: text, finishReason };
+}
+
+function isGeminiFatalClientError(status: number, detail: string): boolean {
+  return (
+    status === 401 ||
+    status === 403 ||
+    (status === 400 &&
+      /api[_ ]?key|API_KEY_INVALID|key not valid|안전 필터/i.test(detail))
+  );
+}
+
+type GeminiRawAttemptResult =
+  | { ok: true; content: string; finishReason: string | null }
+  | { ok: false; status: number; detail: string };
+
+async function verifyGeminiModelMetadata(
+  apiKey: string,
+  modelId: string,
+  signal?: AbortSignal,
+): Promise<{ ok: true } | { ok: false; status: number; detail: string }> {
+  const url = `${GEMINI_API_BASE}/${encodeURIComponent(modelId)}`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'x-goog-api-key': apiKey,
+    },
+    signal,
+  });
+
+  let payload: GeminiRawResponse | null = null;
+  try {
+    payload = (await res.json()) as GeminiRawResponse;
+  } catch {
+    payload = null;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      detail: payload?.error?.message ?? res.statusText ?? '',
+    };
+  }
+
+  if (payload?.error?.message) {
+    return {
+      ok: false,
+      status: Number(payload.error.code) || 500,
+      detail: payload.error.message,
+    };
+  }
+
+  return { ok: true };
+}
+
+async function executeSingleGeminiModelAttempt(params: {
+  apiKey: string;
+  modelId: string;
+  messages: ChatMessage[];
+  temperature?: number;
+  maxTokens: number;
+  signal?: AbortSignal;
+}): Promise<GeminiRawAttemptResult> {
+  let mode: 'fast' | 'jsonOnly' | 'plain' = geminiNoFastThinkingModels.has(
+    params.modelId,
+  )
+    ? 'jsonOnly'
+    : 'fast';
+
+  let attempt = await sendGeminiGenerateContentRequest({
+    apiKey: params.apiKey,
+    modelId: params.modelId,
+    messages: params.messages,
+    temperature: params.temperature,
+    maxTokens: params.maxTokens,
+    configMode: mode,
+    signal: params.signal,
+  });
+
+  if (
+    mode === 'fast' &&
+    !attempt.ok &&
+    attempt.status === 400 &&
+    !isGeminiFatalClientError(attempt.status, attempt.detail) &&
+    /thinking|budget|thinkingLevel|thinking_level|thinkingConfig|not supported|unknown name|invalid|cannot/i.test(
+      attempt.detail,
+    )
+  ) {
+    geminiNoFastThinkingModels.add(params.modelId);
+    mode = 'jsonOnly';
+    attempt = await sendGeminiGenerateContentRequest({
+      apiKey: params.apiKey,
+      modelId: params.modelId,
+      messages: params.messages,
+      temperature: params.temperature,
+      maxTokens: params.maxTokens,
+      configMode: mode,
+      signal: params.signal,
+    });
+  }
+
+  if (
+    mode === 'jsonOnly' &&
+    !attempt.ok &&
+    attempt.status === 400 &&
+    !isGeminiFatalClientError(attempt.status, attempt.detail) &&
+    /responseMimeType|json|mime/i.test(attempt.detail)
+  ) {
+    attempt = await sendGeminiGenerateContentRequest({
+      apiKey: params.apiKey,
+      modelId: params.modelId,
+      messages: params.messages,
+      temperature: params.temperature,
+      maxTokens: params.maxTokens,
+      configMode: 'plain',
+      signal: params.signal,
+    });
+  }
+
+  return attempt;
+}
+
+function buildOrderedGeminiCandidates(primaryModel: string): string[] {
+  const all = [
+    primaryModel,
+    ...GEMINI_OVERLOAD_FALLBACK_MODELS.filter((m) => m !== primaryModel),
+  ];
+  const now = Date.now();
+  const healthy: string[] = [];
+  const cooled: string[] = [];
+  for (const model of all) {
+    const until = geminiOverloadedUntil.get(model) ?? 0;
+    if (until > now) {
+      cooled.push(model);
+    } else {
+      healthy.push(model);
+    }
+  }
+  return [...healthy, ...cooled];
+}
+
+async function runGeminiWithOverloadFailover(params: {
+  config: OpenRouterConfig;
+  messages: ChatMessage[];
+  temperature?: number;
+  maxTokens: number;
+  signal?: AbortSignal;
+}): Promise<{
+  content: string;
+  finishReason: string | null;
+  usedModelId: string;
+  fallbackFromModelId?: string;
+}> {
+  const apiKey = getActiveAiApiKey(params.config);
+  const primaryModel = getActiveAiModelId(params.config);
+  const candidates = buildOrderedGeminiCandidates(primaryModel);
+  let lastError: { status: number; detail: string } = {
+    status: 503,
+    detail: 'Service unavailable',
+  };
+
+  for (let idx = 0; idx < candidates.length; idx++) {
+    const candidateModel = candidates[idx];
+    const hasBackupRemaining = idx < candidates.length - 1;
+
+    const runAttemptOnce = async (): Promise<GeminiRawAttemptResult> => {
+      if (!hasBackupRemaining) {
+        return executeSingleGeminiModelAttempt({
+          apiKey,
+          modelId: candidateModel,
+          messages: params.messages,
+          temperature: params.temperature,
+          maxTokens: params.maxTokens,
+          signal: params.signal,
+        });
+      }
+
+      const timeoutGuard = withAttemptTimeout(
+        params.signal,
+        GEMINI_ATTEMPT_TIMEOUT_MS,
+      );
+      try {
+        return await executeSingleGeminiModelAttempt({
+          apiKey,
+          modelId: candidateModel,
+          messages: params.messages,
+          temperature: params.temperature,
+          maxTokens: params.maxTokens,
+          signal: timeoutGuard.signal,
+        });
+      } catch (err) {
+        if (!params.signal?.aborted && timeoutGuard.didTimeout()) {
+          return {
+            ok: false,
+            status: 504,
+            detail: 'Model response timeout',
+          };
+        }
+        throw err;
+      } finally {
+        timeoutGuard.cleanup();
+      }
+    };
+
+    let attempt = await runAttemptOnce();
+
+    if (
+      !attempt.ok &&
+      candidates.length === 1 &&
+      isTransientOverloadStatus(attempt.status)
+    ) {
+      await sleepWithSignal(250, params.signal);
+      attempt = await runAttemptOnce();
+    }
+
+    if (attempt.ok) {
+      geminiOverloadedUntil.delete(candidateModel);
+      return {
+        content: attempt.content,
+        finishReason: attempt.finishReason,
+        usedModelId: candidateModel,
+        fallbackFromModelId:
+          candidateModel !== primaryModel ? primaryModel : undefined,
+      };
+    }
+
+    if (isGeminiFatalClientError(attempt.status, attempt.detail)) {
+      throw new Error(formatGeminiError(attempt.status, attempt.detail));
+    }
+
+    if (candidateModel === primaryModel && attempt.status === 404) {
+      throw new Error(formatGeminiError(attempt.status, attempt.detail));
+    }
+
+    lastError = { status: attempt.status, detail: attempt.detail };
+
+    if (isTransientOverloadStatus(attempt.status)) {
+      geminiOverloadedUntil.set(
+        candidateModel,
+        Date.now() + GEMINI_OVERLOAD_COOLDOWN_MS,
+      );
+      continue;
+    }
+
+    if (candidateModel === primaryModel) {
+      throw new Error(formatGeminiError(attempt.status, attempt.detail));
+    }
+  }
+
+  throw new Error(formatGeminiError(lastError.status, lastError.detail));
+}
+
+async function requestGeminiWithCompatibilityFallback(params: {
+  config: OpenRouterConfig;
+  messages: ChatMessage[];
+  temperature?: number;
+  maxTokens: number;
+  signal?: AbortSignal;
+}): Promise<{ content: string; finishReason: string | null }> {
+  const res = await runGeminiWithOverloadFailover(params);
+  return { content: res.content, finishReason: res.finishReason };
+}
+
 async function requestWithCompatibilityFallback(params: {
   config: OpenRouterConfig;
   messages: ChatMessage[];
@@ -466,7 +1033,7 @@ async function requestWithCompatibilityFallback(params: {
   signal?: AbortSignal;
 }): Promise<{ content: string; finishReason: string | null }> {
   const modelKey = params.config.modelId.trim() || DEFAULT_OPENROUTER_MODEL;
-  const shouldUseFast = !fastParamsUnsupportedModels.has(modelKey);
+  let shouldUseFast = !fastParamsUnsupportedModels.has(modelKey);
 
   let attempt = await sendChatCompletionRequest({
     ...params,
@@ -482,9 +1049,21 @@ async function requestWithCompatibilityFallback(params: {
     )
   ) {
     fastParamsUnsupportedModels.add(modelKey);
+    shouldUseFast = false;
     attempt = await sendChatCompletionRequest({
       ...params,
       useFastParams: false,
+    });
+  }
+
+  if (
+    !attempt.ok &&
+    (attempt.status === 502 || attempt.status === 503 || attempt.status === 504)
+  ) {
+    await sleepWithSignal(350, params.signal);
+    attempt = await sendChatCompletionRequest({
+      ...params,
+      useFastParams: shouldUseFast,
     });
   }
 
@@ -502,12 +1081,23 @@ export async function callOpenRouterJson<T>(params: {
   maxTokens?: number;
   signal?: AbortSignal;
 }): Promise<T> {
-  if (!params.config.apiKey.trim()) {
-    throw new Error('OpenRouter API 키가 설정되지 않았습니다.');
+  const provider = getActiveAiProvider(params.config);
+  const activeKey = getActiveAiApiKey(params.config);
+  if (!activeKey) {
+    throw new Error(
+      provider === 'gemini'
+        ? 'Google Gemini API 키가 설정되지 않았습니다.'
+        : 'OpenRouter API 키가 설정되지 않았습니다.',
+    );
   }
 
+  const runAttempt =
+    provider === 'gemini'
+      ? requestGeminiWithCompatibilityFallback
+      : requestWithCompatibilityFallback;
+
   const baseMaxTokens = params.maxTokens ?? 2048;
-  const first = await requestWithCompatibilityFallback({
+  const first = await runAttempt({
     config: params.config,
     messages: params.messages,
     temperature: params.temperature,
@@ -531,7 +1121,7 @@ export async function callOpenRouterJson<T>(params: {
       },
     ];
 
-    const retry = await requestWithCompatibilityFallback({
+    const retry = await runAttempt({
       config: params.config,
       messages: retryMessages,
       temperature: 0.1,
@@ -555,31 +1145,73 @@ export async function callOpenRouterJson<T>(params: {
 export async function testOpenRouterConnection(
   config: OpenRouterConfig,
   signal?: AbortSignal,
-): Promise<{ modelId: string; latencyMs: number }> {
-  if (!config.apiKey.trim()) {
-    throw new Error('먼저 OpenRouter API 키를 입력해 주세요.');
+): Promise<{
+  provider: AiProviderId;
+  modelId: string;
+  fallbackFromModelId?: string;
+  latencyMs: number;
+}> {
+  const provider = getActiveAiProvider(config);
+  const activeKey = getActiveAiApiKey(config);
+  const modelId = getActiveAiModelId(config);
+
+  if (!activeKey) {
+    throw new Error(
+      provider === 'gemini'
+        ? '먼저 Google Gemini API 키를 입력해 주세요.'
+        : '먼저 OpenRouter API 키를 입력해 주세요.',
+    );
   }
+
   const t0 = performance.now();
-  const attempt = await sendChatCompletionRequest({
+  if (provider === 'gemini') {
+    const metaCheck = await verifyGeminiModelMetadata(
+      activeKey,
+      modelId,
+      signal,
+    );
+    if (metaCheck.ok) {
+      return {
+        provider,
+        modelId,
+        latencyMs: Math.round(performance.now() - t0),
+      };
+    }
+
+    if (
+      isGeminiFatalClientError(metaCheck.status, metaCheck.detail) ||
+      metaCheck.status === 404
+    ) {
+      throw new Error(formatGeminiError(metaCheck.status, metaCheck.detail));
+    }
+
+    const res = await runGeminiWithOverloadFailover({
+      config,
+      messages: [{ role: 'user', content: 'ok' }],
+      temperature: 0,
+      maxTokens: 8,
+      signal,
+    });
+
+    return {
+      provider,
+      modelId: res.usedModelId,
+      fallbackFromModelId: res.fallbackFromModelId,
+      latencyMs: Math.round(performance.now() - t0),
+    };
+  }
+
+  await requestWithCompatibilityFallback({
     config,
-    messages: [
-      {
-        role: 'user',
-        content: 'Reply with exact JSON: {"ok":true}',
-      },
-    ],
+    messages: [{ role: 'user', content: 'ok' }],
     temperature: 0,
-    maxTokens: 32,
-    useFastParams: false,
+    maxTokens: 8,
     signal,
   });
 
-  if (!attempt.ok) {
-    throw new Error(formatOpenRouterError(attempt.status, attempt.detail));
-  }
-
   return {
-    modelId: config.modelId.trim() || DEFAULT_OPENROUTER_MODEL,
+    provider,
+    modelId,
     latencyMs: Math.round(performance.now() - t0),
   };
 }

@@ -587,54 +587,45 @@ export async function suggestReplacementsAndParaphrases(params: {
     });
 
   const targetLine = isMultiWord
-    ? `Target expression to replace: "${targetText}"`
-    : `Target word to replace: "${targetText}"`;
+    ? `Target expression: "${targetText}"`
+    : `Target word: "${targetText}"`;
+  const wordsToReplaceSample = guidance.wordsToReplace.slice(0, 12);
+  const allowedWordsSample = guidance.allowedWordsInSpan.slice(0, 24);
 
   const firstRaw = parseCombinedResponse(
     await callOpenRouterJson<unknown>({
       config,
       temperature: 0.2,
-      maxTokens: 1800,
+      maxTokens: 2400,
       signal,
       messages: [
         {
           role: 'system',
           content:
-            'You are an EFL controlled-vocabulary editor. Suggest ONLY high-frequency basic English that fits the learner wordlists. Output ONLY one raw RFC 8259 JSON object without markdown fences.',
+            'EFL controlled-vocabulary editor. Use high-frequency basic English fitting the learner lists. Output one raw RFC 8259 JSON object only.',
         },
         {
           role: 'user',
           content: [
             targetLine,
-            `Sentence context: "${enclosing.sentenceWithPunct}"`,
-            `Allowed vocabulary (every word must come from these lists): ${levelDesc}`,
+            `Sentence: "${enclosing.sentenceWithPunct}"`,
+            `Allowed lists: ${levelDesc}`,
             !verifierCtx.masterEnabled
-              ? 'Word-family expansion is OFF: prefer uninflected base/singular forms (e.g. student, word, help, make) over plurals or -ing/-ed.'
+              ? 'Word-family expansion OFF: prefer base/singular forms (student, word, help).'
               : '',
-            guidance.wordsToReplace.length > 0
-              ? `Out-of-list words in the sentence that must be replaced: [${guidance.wordsToReplace.join(', ')}]`
+            wordsToReplaceSample.length > 0
+              ? `Avoid/replace out-of-list words: [${wordsToReplaceSample.join(', ')}]`
               : '',
-            guidance.allowedWordsInSpan.length > 0
-              ? `In-list words already in the sentence (safe to reuse): [${guidance.allowedWordsInSpan.join(', ')}]`
+            allowedWordsSample.length > 0
+              ? `Safe in-list words: [${allowedWordsSample.join(', ')}]`
               : '',
-            '',
-            'Return JSON with exact keys:',
+            'JSON schema:',
             '{',
-            '  "synonyms": [',
-            '    { "replacementText": "drop-in replacement inflected for this exact slot", "baseForm": "lemma", "meaningKo": "...", "nuanceKo": "..." }',
-            '  ],',
-            '  "paraphrases": [',
-            '    { "styleLabelKo": "자연스러운 표준 표현", "rewrittenText": "full rewritten sentence", "noteKo": "..." },',
-            '    { "styleLabelKo": "쉬운 기초어휘 풀이", "rewrittenText": "...", "noteKo": "..." },',
-            '    { "styleLabelKo": "원문 구조 유지 최소 수정", "rewrittenText": "...", "noteKo": "..." }',
-            '  ]',
+            '  "synonyms": [{ "replacementText": "slot replacement", "baseForm": "lemma", "meaningKo": "핵심 뜻", "nuanceKo": "뉘앙스" }],',
+            '  "paraphrases": [{ "styleLabelKo": "자연스러운 표준 표현 | 쉬운 기초어휘 풀이 | 원문 구조 유지 최소 수정", "rewrittenText": "rewritten sentence", "noteKo": "짧은 설명" }]',
             '}',
-            '',
-            `Provide 5 replacement candidates for the target ${isMultiWord ? 'expression (1-4 words each)' : 'word (single words preferred, short phrases allowed)'} and 3 distinct full-sentence paraphrases of the sentence context.`,
-            'ALWAYS include non-empty paraphrases (3 distinct items). Each rewrittenText MUST differ from Sentence context.',
-            'Rewrite paraphrases in ultra-simple core English (top 500-800 everyday words, replacing technical or domain nouns with simple everyday words even if nuances are simplified).',
-            'Every word in both replacements and paraphrases MUST stay inside the allowed vocabulary.',
-            'Keep meaningKo, nuanceKo, and noteKo concise (under 12 words each). Output raw RFC 8259 JSON only without markdown fences.',
+            `Rules: 5 ${isMultiWord ? 'short (1-4 word)' : 'single-word'} replacements + 3 distinct simple-core paraphrases different from Sentence.`,
+            'Use only allowed lists; keep meaningKo/nuanceKo/noteKo <= 10 words.',
           ]
             .filter(Boolean)
             .join('\n'),

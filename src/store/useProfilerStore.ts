@@ -10,6 +10,7 @@ import {
   sliceProfileSpanText,
 } from '../ai/lexiconVerifier';
 import {
+  clearGeminiApiKey,
   clearOpenRouterApiKey,
   loadOpenRouterConfig,
   saveOpenRouterConfig,
@@ -26,13 +27,16 @@ import {
   isManifestEntryLoaded,
   parseRawFamilyGroups,
 } from '../core/wordlistParser';
-import type {
-  CombinedSuggestionResult,
-  InspectorBodyTab,
-  MorphologyAnalysisResult,
-  OpenRouterConfig,
-  SettingsSectionId,
-  TokenSpanSelection,
+import {
+  getActiveAiModelId,
+  getActiveAiProvider,
+  hasActiveAiApiKey,
+  type CombinedSuggestionResult,
+  type InspectorBodyTab,
+  type MorphologyAnalysisResult,
+  type OpenRouterConfig,
+  type SettingsSectionId,
+  type TokenSpanSelection,
 } from '../types/ai';
 import type {
   AuxiliaryListState,
@@ -384,9 +388,10 @@ export interface ProfilerStoreState {
   closeCoverageModal: () => void;
   closeValidationModal: () => void;
 
-  // OpenRouter AI Assistant Actions
+  // AI Assistant Actions
   updateOpenRouterConfig: (next: OpenRouterConfig) => void;
   clearOpenRouterKey: () => void;
+  clearGeminiKey: () => void;
   cancelAiRequest: () => void;
   runAiMorphologyCheck: () => Promise<void>;
   openAiSuggestionModal: (options?: {
@@ -2108,14 +2113,20 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     closeCoverageModal: () => set({ coverageModal: null }),
     closeValidationModal: () => set({ validationModal: null }),
 
-    // OpenRouter AI Assistant Actions
+    // AI Assistant Actions
     updateOpenRouterConfig: (next) => {
+      aiSuggestionCache.clear();
       const saved = saveOpenRouterConfig(next);
       set({ openRouterConfig: saved, aiError: null });
     },
 
     clearOpenRouterKey: () => {
       const cleared = clearOpenRouterApiKey(get().openRouterConfig);
+      set({ openRouterConfig: cleared });
+    },
+
+    clearGeminiKey: () => {
+      const cleared = clearGeminiApiKey(get().openRouterConfig);
       set({ openRouterConfig: cleared });
     },
 
@@ -2131,10 +2142,10 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         });
         return;
       }
-      if (!st.openRouterConfig.apiKey.trim()) {
+      if (!hasActiveAiApiKey(st.openRouterConfig)) {
         set({
           aiError:
-            'OpenRouter API 키가 설정되지 않았습니다. Settings > AI Assistant에서 키를 입력해 주세요.',
+            'AI API 키가 설정되지 않았습니다. Settings > AI Assistant에서 무료 Gemini API 키 또는 OpenRouter API 키를 입력해 주세요.',
           settingsModalOpen: true,
           settingsInitialSection: 'ai',
         });
@@ -2165,8 +2176,10 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         includeExtendedMetadata: false,
       });
 
+      const activeProvider = getActiveAiProvider(st.openRouterConfig);
+      const activeModelId = getActiveAiModelId(st.openRouterConfig);
       const textSig = `${sourceOriginalText.length}:${sourceOriginalText.slice(0, 64)}:${sourceOriginalText.slice(-64)}`;
-      const cacheKey = `${sourceId}|${textSig}|${span.startTokenIdx}:${span.endTokenIdx}|${st.openRouterConfig.modelId}|${verifierCtx.cacheKey}`;
+      const cacheKey = `${sourceId}|${textSig}|${span.startTokenIdx}:${span.endTokenIdx}|${activeProvider}:${activeModelId}|${verifierCtx.cacheKey}`;
 
       if (options?.forceRefresh !== true) {
         const cached = aiSuggestionCache.get(cacheKey);
@@ -2255,10 +2268,12 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         set({ aiError: '먼저 본문에서 분석할 단어를 클릭해 주세요.' });
         return;
       }
-      if (!st.openRouterConfig.apiKey.trim()) {
+      if (!hasActiveAiApiKey(st.openRouterConfig)) {
         set({
           aiError:
-            'OpenRouter API 키가 설정되지 않았습니다. 아래 버튼에서 키를 입력해 주세요.',
+            'AI API 키가 설정되지 않았습니다. Settings > AI Assistant에서 무료 Gemini API 키 또는 OpenRouter API 키를 입력해 주세요.',
+          settingsModalOpen: true,
+          settingsInitialSection: 'ai',
         });
         return;
       }

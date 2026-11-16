@@ -120,7 +120,7 @@ export const HelpAboutModal: React.FC = () => {
 
               <div>
                 <h3 className="help-section-heading">
-                  3. OpenRouter AI 추천 &amp; 예외 어휘 처리 (Extra Ignore Words)
+                  3. AI 어휘 추천 (Google Gemini 무료 API · OpenRouter) &amp; 예외 어휘 처리
                 </h3>
                 <p className="help-prose">
                   본문 단어를 클릭하거나 구문을 드래그한 뒤 우측{' '}

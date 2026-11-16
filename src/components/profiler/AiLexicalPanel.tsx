@@ -9,12 +9,19 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useProfilerStore } from '../../store/useProfilerStore';
+import {
+  getActiveAiModelId,
+  getActiveAiProvider,
+  hasActiveAiApiKey,
+} from '../../types/ai';
 
 export const AiLexicalPanel: React.FC = () => {
   const store = useProfilerStore();
   const profile = store.activeProfile;
   const span = store.selectedTokenSpan;
-  const hasApiKey = Boolean(store.openRouterConfig.apiKey.trim());
+  const hasApiKey = hasActiveAiApiKey(store.openRouterConfig);
+  const activeProvider = getActiveAiProvider(store.openRouterConfig);
+  const activeModelId = getActiveAiModelId(store.openRouterConfig);
 
   const activeRefs = useMemo(
     () => store.referenceLists.filter((r) => r.enabled),
@@ -40,17 +47,20 @@ export const AiLexicalPanel: React.FC = () => {
           <div className="ai-onboarding-icon">
             <KeyRound size={20} />
           </div>
-          <h4 className="ai-onboarding-title">OpenRouter API 연결 필요</h4>
+          <h4 className="ai-onboarding-title">
+            AI API 키 연결 필요 (무료 Gemini 지원)
+          </h4>
           <p className="ai-onboarding-desc">
-            서버·데이터베이스 없이 브라우저에서 직접 OpenRouter 모델을 호출하여
-            Word List 안의 추천 단어와 패러프레이즈 문장을 만듭니다.
+            별도 서버 없이 브라우저에서 무료 Google Gemini API 또는 OpenRouter
+            모델을 직접 호출하여 Word List 안의 추천 단어와 패러프레이즈 문장을
+            만듭니다.
           </p>
           <button
             type="button"
             className="btn btn-primary btn-sm ai-full-btn"
             onClick={() => store.setSettingsModalOpen(true, 'ai')}
           >
-            <Settings2 size={15} /> OpenRouter API 키 설정하기
+            <Settings2 size={15} /> Gemini / OpenRouter API 키 설정하기
           </button>
         </div>
       </div>
@@ -64,6 +74,22 @@ export const AiLexicalPanel: React.FC = () => {
   return (
     <div className="ai-panel-wrap">
       <div className="ai-controls-box">
+        <div className="ai-provider-bar">
+          <span className="ai-provider-label">
+            활성 AI:{' '}
+            <strong>
+              {activeProvider === 'gemini' ? 'Gemini' : 'OpenRouter'}
+            </strong>{' '}
+            · <span className="mono">{activeModelId}</span>
+          </span>
+          <button
+            type="button"
+            className="btn btn-sm ai-provider-change-btn"
+            onClick={() => store.setSettingsModalOpen(true, 'ai')}
+          >
+            변경
+          </button>
+        </div>
         <div className="ai-level-cap-note">
           검증 기준: 왼쪽 Reference Lists의 활성 단어장{' '}
           <strong>{activeRefs.length}개</strong>
