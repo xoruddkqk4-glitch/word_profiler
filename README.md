@@ -2,7 +2,7 @@
 
 `AntWordProfiler 2.2.1` 데스크톱 프로그램의 어휘 분석·통계 규칙과 **2015·2022 개정 영어과 교육과정 어휘 목록**을 기반으로 구현된 100% 브라우저 로컬(Local-First) 영어 코퍼스·어휘 레벨 프로파일링 웹 애플리케이션입니다.
 
-모든 파일 파싱(`.txt`, `.docx`, `.pdf`), Web Worker 어휘 인덱싱, 6종 코퍼스 통계 집계 및 컬러 Word/Excel 내보내기는 외부 서버 전송 없이 사용자의 브라우저 내부에서만 실행됩니다. (선택 기능인 OpenRouter AI 어휘 도우미 또한 백엔드 서버 없이 사용자가 입력한 API 키로 브라우저에서 직접 호출하며, 단어장 검증은 로컬 `lexiconVerifier`로 결정론적 대조를 수행합니다.)
+모든 파일 파싱(`.txt`, `.docx`, `.pdf`), Web Worker 어휘 인덱싱, 6종 코퍼스 통계 집계 및 컬러 Word/Excel 내보내기는 외부 서버 전송 없이 사용자의 브라우저 내부에서만 실행됩니다. (선택 기능인 Google Gemini 무료 API 및 OpenRouter AI 어휘 도우미 또한 백엔드 서버 없이 사용자가 입력한 API 키로 브라우저에서 직접 호출하며, 단어장 검증은 로컬 `lexiconVerifier`로 결정론적 대조를 수행합니다.)
 
 ---
 
@@ -34,13 +34,13 @@
 ### 4. 단어장 검증 및 설정 호환성
 - 활성 레벨 리스트 간 중복 어형 검사(`Validate Level Lists`)
 - 단어장 그룹 `Rows`(`.txt`/`.zip`) 및 `Paul Nation Trees` 포맷 내보내기
-- 데스크톱 `AntWordProfiler` `.ini` 및 웹 `.json` 설정 파일 가져오기/내보내기 (OpenRouter API 키는 내보내기 파일에 포함하지 않음)
+- 데스크톱 `AntWordProfiler` `.ini` 및 웹 `.json` 설정 파일 가져오기/내보내기 (Gemini · OpenRouter API 키는 내보내기 파일에 포함하지 않음)
 - **Tailwind CSS v4 + OKLCH 라이트/다크 테마 시스템**: `Poppins` + `Noto Sans KR` + `Roboto Mono` 타이포그래피, WCAG 2.1 AA 명도 대비, 키보드 접근성(`F5`, `Ctrl+O`, `Ctrl+F`, 모달 `Escape`, 스플리터 방향키 조절) 지원
 
-### 5. OpenRouter 기반 AI 어휘 도우미 (`src/ai/`)
-- **브라우저 직접 호출 및 로컬 사전 검증**: 백엔드 서버·DB 없이 브라우저에서 OpenRouter API를 직접 호출하며, 모든 추천 후보와 패러프레이즈 토큰은 로컬 `lexiconVerifier`로 활성 단어장 등재 여부를 결정론적으로 대조 검증합니다.
-- **통합 AI 어휘 추천 모달 (`AiSuggestionModal`)**: 선택한 단어/표현의 문맥을 분석해 활성 Word List 내 추천 단어(최대 3개)와 패러프레이즈 문장(최소 1~최대 3문장 보장)을 생성하며, 대형 창(`min(1620px, 94vw)`), 상단 헤더 포인터 드래그 이동(더블클릭 시 중앙 복귀), CSS Grid `subgrid` 기반 좌·우 카드 행렬(오와 열) 정렬을 제공합니다.
-- **응답 안정성 & 고속화**: `<think>` 블록·코드 펜스·제어문자·잘린 배열 다단계 JSON 복구 파서(`extractJsonObjectFromText`), OpenRouter `provider.sort: "throughput"` 라우팅 및 `reasoning: { effort: "minimal", exclude: true }` 경량화, 모델별 HTTP 400 호환성 캐시, 동일 조건 재조회 시 0ms 즉시 표시하는 세션 캐시(최대 32건)를 지원합니다.
+### 5. Google Gemini (무료 지원) · OpenRouter 기반 AI 어휘 도우미 (`src/ai/`)
+- **이중 API 제공자 및 브라우저 직접 호출**: 백엔드 서버·DB 없이 무료 티어를 제공하는 **Google Gemini API (`Google AI Studio`)** 또는 **OpenRouter API**를 선택해 브라우저에서 직접 호출하며, 두 API 키를 독립적으로 보관·삭제할 수 있습니다. 모든 추천 후보와 패러프레이즈 토큰은 로컬 `lexiconVerifier`로 활성 단어장 등재 여부를 결정론적으로 대조 검증합니다.
+- **통합 AI 어휘 추천 모달 (`AiSuggestionModal`) & 실시간 로딩 피드백**: 선택한 단어/표현의 문맥을 즉시(`0.0초`) 상단에 표시하고 회전 스피너·초록 맥박 표시·`0.1초` 실시간 경과 타이머·왕복 진행 바·2단 쉬머 스켈레톤 카드로 작동 상태를 직관적으로 보여 주며, 대형 창(`min(1620px, 94vw)`), 헤더 포인터 드래그 이동, CSS Grid `subgrid` 좌·우 오와 열 정렬을 제공합니다.
+- **혼잡 자동 우회 & 고속 추론**: Gemini `GET /v1beta/models/<id>` 즉시 연결 확인, `HTTP 503` 요청 폭주 및 `7.5초` 응답 지연 시 경량 백업 무료 모델(`gemini-3.5-flash-lite` 등) 즉시 자동 페일오버(60초 쿨다운 기억), Gemini 세대별 추론 최적화(Gemini 3/4 `thinkingLevel: "LOW"`, Gemini 2.5 `thinkingBudget: 0`), OpenRouter `provider.sort: "throughput"` + `reasoning: { effort: "low", exclude: true }`, 다단계 JSON 복구 파서(`extractJsonObjectFromText`) 및 32건 세션 캐시를 지원합니다.
 - **어근·기본형 형태소 대조 (`analyzeMorphologyAndRoots`)**: 선택 단어의 문맥 품사 및 기본형·파생 기반어·어근의 활성 단어장 등재 여부를 즉시 대조합니다.
 
 ---
@@ -52,7 +52,7 @@
 - **문서 입출력**: `mammoth` (`.docx` 읽기), `pdfjs-dist` (`.pdf` 읽기), `docx` (컬러 `.docx` 생성), `xlsx` (다중 시트 `.xlsx` 생성), `jszip` (단어장 아카이브)
 - **구조**:
   - `src/core/`: 무손실 토크나이저, 단어장/패밀리 파서, 프로파일러, 6종 통계 계산기, 중복 검증기, WCAG 색상 팔레트
-  - `src/ai/`: OpenRouter 클라이언트, 결정론적 로컬 어휘 검증기(`lexiconVerifier`), AI 어휘/패러프레이즈/형태소 서비스
+  - `src/ai/`: Google Gemini · OpenRouter 통합 클라이언트, 결정론적 로컬 어휘 검증기(`lexiconVerifier`), AI 어휘/패러프레이즈/형태소 서비스
   - `src/workers/`: 메인 스레드 블로킹 방지를 위한 Web Worker 파이프라인
   - `src/io/`: 브라우저 로컬 파일 리더 및 `.docx`/`.html`/`.txt`/`.tsv`/`.xlsx`/`.ini` 익스포터
   - `src/components/`: `layout/`, `profiler/`, `stats/`, `modals/` 3패널 워크벤치 UI
@@ -113,4 +113,20 @@ npm run build
 - **검증 결과**:
   - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
   - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 7개 테스트 파일 / 31개 테스트 전원 통과: `wordlistParser`, `statsCalculator`, `lexiconVerifier`, `openRouterClient`, `lexicalAssistantService`, `settingsIniAdapter`, `useProfilerStore`).
+  - UI 정적 디자인 스캔 통과: `impeccable.cmd detect .` (50개 파일 스캔 통과).
+
+## [2026-11-16 16:26] 업데이트 이력 (Commit ID: `acf6e8e`)
+- **수정 내용**:
+  - **Google Gemini 무료 API (Google AI Studio) 직접 연동 추가**:
+    - `AiProviderId` (`'gemini' | 'openrouter'`) 및 이중 키 독립 저장 구조(`antwordprofiler_gemini_key_v1` / `antwordprofiler_openrouter_key_v1`)를 도입해 신용카드 없이 발급 가능한 무료 Gemini API와 기존 OpenRouter API를 설정 창 탭에서 자유롭게 전환·사용할 수 있도록 확장(`.ini`/`.json` 내보내기 시 모든 API 키 제외 유지).
+    - 우측 `AiLexicalPanel`, 상단 `Settings` 메뉴, 본문 우클릭 메뉴에 활성 AI 제공자·모델 표시 및 한 줄 `'변경'` 버튼(`.ai-provider-change-btn`) 적용, `Global Settings` 창을 약 2배(`min(1380px, 94vw)`)로 확대하고 2열 모델 입력·가로 라디오 배치·`minmax(0, 1fr)` 오버플로 방지로 가로·세로 스크롤을 제거.
+  - **발생 문제 및 해결 1 (Gemini 무료 티어 `HTTP 503` 요청 폭주 및 연결 확인 지연)**:
+    - 주력 모델(`gemini-3.8-flash`)에 일시적 수요 급증(`HTTP 503: high demand`)이나 응답 대기열 지연(`7.5초` 초과)이 발생하면 해당 모델을 60초간 쿨다운 처리하고 `gemini-3.5-flash-lite` → `gemini-2.5-flash-lite` → `gemini-2.5-flash` → `gemini-flash-latest` 백업 무료 모델로 `0ms` 즉시 자동 우회(`runGeminiWithOverloadFailover`)하도록 구현.
+    - Gemini 연결 테스트(`testOpenRouterConnection`) 시 토큰 생성 대신 경량 메타데이터 엔드포인트(`GET /v1beta/models/<id>`)로 API 키와 모델을 수십 ms 내에 즉시 검증하도록 고속화.
+  - **발생 문제 및 해결 2 (AI 추천 로딩 화면 정지 현상 및 Gemini 3/4 추론 속도 저하)**:
+    - `workspace.css`의 `@media (prefers-reduced-motion: reduce)` 전역 규칙이 OS 애니메이션 해제 환경에서 로딩 스피너까지 정지시키던 문제를 해결하고, 즉시 원문 문장 미리보기·회전 스피너·실시간 `0.1초` 타이머·왕복 진행 막대·3단계 상태·2단 쉬머 스켈레톤 카드를 추가.
+    - Gemini 3/4 계열에 구형 `thinkingBudget: 0`을 전송해 HTTP 400 폴백 후 기본 심층 사고 모드로 느려지던 문제를 세대별 분기(Gemini 3/4 `thinkingLevel: 'LOW'`, Gemini 2.5 `thinkingBudget: 0`) 및 OpenRouter `reasoning: { effort: 'low', exclude: true }`·프롬프트 경량화로 해결.
+- **검증 결과**:
+  - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
+  - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 7개 테스트 파일 / 39개 테스트 전원 통과 — Gemini 직접 호출·세대별 `thinkingConfig`·`GET` 연결 확인·`503` 즉시 우회 및 쿨다운·이중 키 독립 저장 테스트 포함).
   - UI 정적 디자인 스캔 통과: `impeccable.cmd detect .` (50개 파일 스캔 통과).
