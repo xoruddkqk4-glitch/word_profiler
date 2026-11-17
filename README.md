@@ -19,12 +19,13 @@
 8. **2015 교육과정 패밀리 + AWL 학술어휘**: 2015 교육과정 3,000 패밀리 + AWL 570 결합 프리셋
 
 ### 2. File Profiler (지문 프로파일링 & 인라인 편집)
-- `.txt`(UTF-8 / EUC-KR 스마트 디코딩), `.docx`(`mammoth`), `.pdf`(`pdfjs-dist`) 드래그 앤 드롭 및 폴더 일괄 로드 지원
-- 유니코드 정규식 기반 무손실 토큰화(`leadingWs` / `trailingWs` 원문 공백·개행 100% 보존)
+- `.txt`(UTF-8 / EUC-KR 스마트 디코딩), `.docx`(`mammoth` 지연 로드), `.pdf`(`pdfjs-dist` 지연 로드) 드래그 앤 드롭 및 폴더 일괄 로드 지원
+- **복수 문항 세트 `.txt` 관리**: 하나의 `.txt` 파일(또는 인라인 텍스트) 내 여러 문항을 구분선(`---`, `===`), 문항 번호 헤더(`[18]`, `#1`, `문항 1`, `18.` 등), 또는 빈 줄 2줄 이상으로 자동 감지·무손실 분리하고 **`◀ 이전 문항 / 다음 문항 ▶`**(`Alt + ←` / `Alt + →`) 버튼과 드롭다운으로 지문 간 이동·개별 편집 지원
+- **실시간 Word Count & 무손실 토큰화**: 상단 파일 요약 바에 MS Word 공백 기준 전체 단어 수(`Word Count`) 배지를 실시간 표시하며, `leadingWs` / `trailingWs` 원문 공백·개행을 100% 보존
 - 실시간 색상 하이라이트 (`List Words` 레벨별 색상 보기 ↔ `Non-List Words` 미등재 어휘 집중 보기 전환)
-- `Profiled` / `Edit Text` 세그먼트 전환, 인라인 Undo/Redo 히스토리, 정규식·단어 검색(`Ctrl+F`, `Enter` / `Shift+Enter`), 본문 글꼴 크기 조절(`14px ~ 32px`, 기본 `18px`)
-- **Selection Inspector & Extra Ignore Words**: 단어 클릭 시 출현 빈도·비율·레벨·대표어(`Headword`) 즉시 조회, 본문 우클릭 예외 어휘 등록, 문장 붙여넣기 시 기존 레벨 리스트에 없는 미등재 단어만 자동 추출
-- 레벨 색상이 보존된 Word(`.docx`), 단독 실행 `.html`, 순수 텍스트(`.txt`) 내보내기
+- 깔끔한 `Inline Text` 직접 전환 버튼 + `Open` 툴바 구성, `Profiled` / `Edit Text` 세그먼트 전환, 인라인·파일별 Undo/Redo 히스토리, 정규식·단어 검색(`Ctrl+F`, `Enter` / `Shift+Enter`), 본문 글꼴 크기 조절(`14px ~ 32px`, 기본 `18px`)
+- **Selection Inspector & 서식 포함 복사 (`전체 복사` / `선택 복사`)**: 단어 클릭 시 출현 빈도·비율·레벨·대표어(`Headword`) 즉시 조회 및 **선택된 단어 재클릭 시 선택 해제**, 본문 우클릭 예외 어휘 등록, 문장 붙여넣기 시 기존 레벨 리스트에 없는 미등재 단어만 자동 추출, 그리고 강조 어휘의 **글자색(`#RRGGBB`) + 굵기(`Bold`) 서식을 보존**해 Word·한글(HWP)에 바로 붙여넣기 가능한 멀티 포맷 클립보드 복사 지원
+- 상단 `File` 메뉴를 통한 레벨 색상 보존 Word(`.docx`), 단독 실행 `.html`, 순수 텍스트(`.txt` / 세트 전체 `.txt`) 내보내기
 
 ### 3. Statistics Viewer (6종 코퍼스 통계 & 가상 테이블)
 - 원본 `AntWordProfiler 2.2.1` 스키마와 호환되는 6개 통계 시트 생성:
@@ -171,3 +172,14 @@ npm run exe:build
   - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
   - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 7개 테스트 파일 / 45개 테스트 전원 통과 — 4종 추천 재분류·중복 제거·폴백 합성 3건 및 `splitSentenceAroundSpan` 정확 위치 분리 2건 신규 추가).
   - Windows `.exe` 재빌드 검증 통과: `npm run exe:build` (`tsc -b && vite build && electron-builder --win portable`, Exit Code 0 — `release/AntWordProfiler-Portable.exe` 및 `release/win-unpacked/AntWordProfiler.exe` 최신화 확인).
+
+## [2026-11-17 10:10] 업데이트 이력 (Commit ID: `0677a63`)
+- **수정 내용** *(웹앱 `src/**` · `index.html` · `vite.config.ts` 우선 반영 — Windows `.exe` 리빌드는 추후 별도 진행 예정)*:
+  - **지문 Word Count(전체 단어 수) 배지 추가**: `tokenizer.ts`에 MS Word 공백 기준 단어 수 계산 함수(`countWordsMsWordStyle` — 축약어·하이픈어·숫자 1단어 처리, 단독 문장부호 제외)를 추가하고 `FileProfilerPane.tsx` 상단 요약 바 `(types, tokens)` 우측에 현재 지문 기준 실시간 `Word Count` 배지를 표시.
+  - **복수 문항 세트 `.txt` 관리 및 이전/다음 문항 이동 구현**: 하나의 `.txt`(또는 인라인 텍스트) 내 복수 문항을 구분선(`---`, `===`), 문항 번호 헤더(`[18]`, `#1`, `문항 1`, `18.` 등), 또는 빈 줄 2줄 이상으로 무손실 분리·재조립하는 `passageSetParser.ts`를 구현하고, `이전 문항` / 문항 드롭다운 / `다음 문항`(`Alt + ←` / `Alt + →`) 네비게이션과 문항별 개별 치환·Undo/Redo·통계(`Statistics`) 전개를 연동.
+  - **선택 단어 재클릭 선택 해제 & 서식(글자색·굵기) 포함 `'전체 복사'` / `'선택 복사'` 개편**: `HighlightedTextView.tsx` 및 `useProfilerStore.ts`에서 선택된 단일 단어를 다시 좌클릭하면 선택이 해제되도록 개선(우클릭 메뉴는 선택 유지). `EditorToolbar.tsx`에 `'전체 복사'`·`'선택 복사'` 버튼을 배치하고 `buildRichProfileClipboardPayload` 및 `copyRichTextSafe`(`ClipboardItem` `text/html` + `text/plain` 및 `contenteditable` 폴백)를 통해 강조 어휘의 `#RRGGBB` 색상과 `Bold`(`<b>` / `font-weight: 700`) 서식이 MS Word·한글(HWP) 등에 그대로 복사되도록 구현.
+  - **툴바 UI 정리**: 좌측 `Reference Lists`의 `Clear` 버튼과 에디터 툴바의 `.docx`·`.txt` 버튼 및 `Inline Text` 중복 드롭다운을 제거하여 `[Inline Text]` 직접 전환 버튼 + `[Open]` 구조로 단순화(열린 파일 전환 및 내보내기 기능은 상단 `File` / `Wordlists` 메뉴에 유지).
+  - **초기 로딩 속도 대폭 개선**: 대용량 입출력 모듈(`mammoth`, `pdfjs-dist` + PDF 워커, `docx`, `xlsx`, `jszip`)을 실행 시점 동적 `import()`로 분리하고, 닫힌 5개 모달과 `StatsViewerPane`을 `React.lazy` + 조건부 마운트로 코드 스플리팅했으며, `index.html` Google Fonts 비동기 로드·`manifest.json` 프리로드, 프리셋+Master 단어장 병렬 `Promise.all` 선행 로드, `vite.config.ts` `lucide-react` 사전 번들링 및 `server.warmup` 설정을 적용.
+- **검증 결과**:
+  - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
+  - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 9개 테스트 파일 / 58개 테스트 전원 통과 — `passageSetParser.test.ts` 8건, `docExporters.test.ts` 3건, `useProfilerStore.test.ts` 재클릭 해제·세트 문항 이동·치환·Undo 2건 포함).
