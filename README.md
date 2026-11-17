@@ -19,7 +19,7 @@
 8. **2015 교육과정 패밀리 + AWL 학술어휘**: 2015 교육과정 3,000 패밀리 + AWL 570 결합 프리셋
 
 ### 2. File Profiler (지문 프로파일링 & 인라인 편집)
-- `.txt`(UTF-8 / EUC-KR 스마트 디코딩), `.docx`(`mammoth` 지연 로드), `.pdf`(`pdfjs-dist` 지연 로드) 드래그 앤 드롭 및 폴더 일괄 로드 지원
+- `.txt`(UTF-8 / UTF-16 LE·BE BOM / EUC-KR 스마트 디코딩), `.docx`(`mammoth` 지연 로드), `.pdf`(`pdfjs-dist` 지연 로드) 열기(`Open`)·드래그 앤 드롭 및 폴더 일괄 로드 지원
 - **복수 문항 세트 `.txt` 관리**: 하나의 `.txt` 파일(또는 인라인 텍스트) 내 여러 문항을 구분선(`---`, `===`), 문항 번호 헤더(`[18]`, `#1`, `문항 1`, `18.` 등), 또는 빈 줄 2줄 이상으로 자동 감지·무손실 분리하고 **`◀ 이전 문항 / 다음 문항 ▶`**(`Alt + ←` / `Alt + →`) 버튼과 드롭다운으로 지문 간 이동·개별 편집 지원
 - **실시간 Word Count & 무손실 토큰화**: 상단 파일 요약 바에 MS Word 공백 기준 전체 단어 수(`Word Count`) 배지를 실시간 표시하며, `leadingWs` / `trailingWs` 원문 공백·개행을 100% 보존
 - 실시간 색상 하이라이트 (`List Words` 레벨별 색상 보기 ↔ `Non-List Words` 미등재 어휘 집중 보기 전환)
@@ -183,3 +183,14 @@ npm run exe:build
 - **검증 결과**:
   - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
   - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 9개 테스트 파일 / 58개 테스트 전원 통과 — `passageSetParser.test.ts` 8건, `docExporters.test.ts` 3건, `useProfilerStore.test.ts` 재클릭 해제·세트 문항 이동·치환·Undo 2건 포함).
+
+## [2026-11-17 21:34] 업데이트 이력 (Commit ID: `b7ae6e5`)
+- **수정 내용** *(웹앱 소스 우선 반영 — Windows `.exe` 리빌드는 사용자 요청에 따라 보류)*:
+  - **발생 문제 및 해결 (`Open` 버튼 및 파일 선택 창에서 `.txt` 파일 미로드 오류)**:
+    - Chromium/Electron 환경에서 `<input type="file">`의 `e.target.files`가 실시간(live) `FileList`여서 `e.target.value = ''` 초기화 직후 `files.length`가 즉시 `0`으로 비워져 조용히 반환되던 원인을 규명하고, 초기화 전에 정적 `File[]` 배열을 먼저 스냅샷하는 공통 헬퍼 `consumeInputFiles`(`src/io/fileReaders.ts`)를 도입.
+    - `EditorToolbar.tsx`(`Open` 버튼), `FileProfilerPane.tsx`(빈 화면 파일 업로드 버튼), `App.tsx`(`Ctrl+O` 단축키 및 드래그 앤 드롭 `Array.from` 스냅샷), `LeftSidebar.tsx`(`Add` 파일 추가 및 드롭), `TopMenuBar.tsx`(`File`·`Wordlists`·`Settings` 메뉴 6개 파일 입력) 전체에 일괄 적용하고 정상 로드 시 잔존 오류 배너를 자동 해제하도록 개선.
+  - **Windows UTF-16 BOM `.txt` 스마트 디코딩 확장**: `decodeTextBufferSmart`에 UTF-16 LE(`FF FE`) 및 UTF-16 BE(`FE FF`) BOM 감지와 개행 정규화(`normalizeDecodedText`)를 추가해 Windows 메모장·PowerShell에서 저장한 UTF-16 텍스트 파일도 깨짐 없이 로드되도록 보완.
+  - **Electron 런타임 설정 보완 (`electron/main.cjs`)**: `app://antwordprofiler` 커스텀 스킴에 V8 `codeCache: true`, 해시 에셋(`assets/`) 불변 캐시 헤더, 클립보드 읽기·서식 쓰기 권한 핸들러(`configureClipboardPermissions`) 반영.
+- **검증 결과**:
+  - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
+  - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 10개 테스트 파일 / 63개 테스트 전원 통과 — `src/io/fileReaders.test.ts` live `FileList` 보존 및 UTF-8/UTF-16 BOM `.txt` 파싱 테스트 5건 신규 추가).
