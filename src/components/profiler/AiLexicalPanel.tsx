@@ -90,9 +90,15 @@ export const AiLexicalPanel: React.FC = () => {
             변경
           </button>
         </div>
-        <div className="ai-level-cap-note">
-          검증 기준: 왼쪽 Reference Lists의 활성 단어장{' '}
-          <strong>{activeRefs.length}개</strong>
+        <div
+          className="ai-level-cap-note"
+          title={
+            activeRefs.length > 0
+              ? `검증 기준 단어장: ${activeRefs.map((r) => r.name).join(', ')}`
+              : '활성 단어장 없음'
+          }
+        >
+          검증 기준: 활성 단어장 <strong>{activeRefs.length}개</strong>
           {activeRefs.length > 0 && (
             <> ({activeRefs.map((r) => r.name).join(', ')})</>
           )}

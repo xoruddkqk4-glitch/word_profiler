@@ -26,8 +26,6 @@ import {
   copyTextSafe,
   exportProfileAsDocx,
   exportProfileAsHtml,
-  exportProfileAsTxt,
-  exportRawTextAsTxt,
 } from '../../io/docExporters';
 import {
   consumeInputFiles,
@@ -49,6 +47,7 @@ import {
   exportSingleStatTabAsTsv,
 } from '../../io/statsExporters';
 import {
+  getPassageTranslationSlotKey,
   resolveActivePassageContext,
   useProfilerStore,
 } from '../../store/useProfilerStore';
@@ -204,6 +203,23 @@ export const TopMenuBar: React.FC = () => {
     inlineText: store.inlineText,
     inlinePassageIndex: store.inlinePassageIndex,
   });
+
+  const activeTranslationSlotKey = getPassageTranslationSlotKey(
+    passageCtx.activeFile?.id ?? null,
+    passageCtx.activePassageIndex,
+  );
+  const activeHasSavedTranslation = Boolean(
+    store.savedTranslations[activeTranslationSlotKey]?.koreanFullText.trim(),
+  );
+  const setHasSavedTranslations =
+    passageCtx.isMultiPassage &&
+    passageCtx.passages.some((p) =>
+      Boolean(
+        store.savedTranslations[
+          getPassageTranslationSlotKey(passageCtx.activeFile?.id ?? null, p.index)
+        ]?.koreanFullText.trim(),
+      ),
+    );
 
   return (
     <header className="top-menubar" ref={menuBarRef}>
@@ -547,11 +563,13 @@ export const TopMenuBar: React.FC = () => {
                 <button
                   type="button"
                   className="menu-item"
-                  disabled={!store.activeProfile}
+                  disabled={
+                    !store.activeProfile &&
+                    !passageCtx.activePassage.content.trim()
+                  }
                   onClick={() => {
                     setOpenMenu(null);
-                    if (!store.activeProfile) return;
-                    exportProfileAsTxt(store.activeProfile);
+                    store.exportActivePassageTxt();
                   }}
                 >
                   <span className="menu-item-left">
@@ -560,6 +578,9 @@ export const TopMenuBar: React.FC = () => {
                       ? 'Save Current Passage (.txt)'
                       : 'Save Plain Text (.txt)'}
                   </span>
+                  {activeHasSavedTranslation && (
+                    <span className="menu-shortcut">우리말 해석 포함</span>
+                  )}
                 </button>
                 {passageCtx.isMultiPassage && (
                   <button
@@ -567,19 +588,16 @@ export const TopMenuBar: React.FC = () => {
                     className="menu-item"
                     onClick={() => {
                       setOpenMenu(null);
-                      const stem = passageCtx.activeFile
-                        ? passageCtx.activeFile.name.replace(/\.[^.]+$/, '')
-                        : 'inline_passage_set';
-                      exportRawTextAsTxt(
-                        passageCtx.fullDocumentText,
-                        `${stem}_set`,
-                      );
+                      store.exportFullPassageSetTxt();
                     }}
                   >
                     <span className="menu-item-left">
                       <Download size={14} /> Save Full Passage Set (
                       {passageCtx.passages.length} items, .txt)
                     </span>
+                    {setHasSavedTranslations && (
+                      <span className="menu-shortcut">우리말 해석 포함</span>
+                    )}
                   </button>
                 )}
 

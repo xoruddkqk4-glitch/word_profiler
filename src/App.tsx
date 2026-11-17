@@ -46,6 +46,11 @@ const AiSuggestionModal = React.lazy(() =>
     default: m.AiSuggestionModal,
   })),
 );
+const BilingualTranslationModal = React.lazy(() =>
+  import('./components/modals/BilingualTranslationModal').then((m) => ({
+    default: m.BilingualTranslationModal,
+  })),
+);
 
 export const App: React.FC = () => {
   const store = useProfilerStore();
@@ -97,7 +102,8 @@ export const App: React.FC = () => {
         st.helpModalTab ||
         st.coverageModal ||
         st.validationModal ||
-        st.aiSuggestionModalOpen,
+        st.aiSuggestionModalOpen ||
+        st.bilingualModalOpen,
       );
 
       // Alt + Left / Right: step between passages in a multi-item set .txt
@@ -382,6 +388,7 @@ export const App: React.FC = () => {
 
       {/* Lazy Modals (mounted only when opened) */}
       <Suspense fallback={null}>
+        {store.bilingualModalOpen && <BilingualTranslationModal />}
         {store.settingsModalOpen && <SettingsModal />}
         {store.validationModal && <ValidateListsModal />}
         {store.coverageModal && <CoverageContentModal />}

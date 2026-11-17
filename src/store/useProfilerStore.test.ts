@@ -93,6 +93,10 @@ describe('useProfilerStore editor & safety invariants', () => {
       aiError: null,
       combinedSuggestionResult: null,
       aiSuggestionModalOpen: false,
+      bilingualModalOpen: false,
+      bilingualLoading: false,
+      bilingualError: null,
+      savedTranslations: {},
     });
   });
 
@@ -281,5 +285,67 @@ describe('useProfilerStore editor & safety invariants', () => {
       '[18]\nFirst passage text\n---\n[19]\nSecond passage words',
     );
     expect(useProfilerStore.getState().filePassageIndices.set1).toBe(1);
+  });
+
+  it('separates [우리말 해석] when opening .txt files and restores it in exported .txt contents', async () => {
+    mockProfileDocument.mockImplementation(
+      async (req: { sourceId: string; sourceName: string; text: string }) =>
+        makeMockProfile(req.sourceId, req.sourceName, req.text),
+    );
+
+    const bilingualSetFile: TargetFileItem = {
+      id: 'bi1',
+      name: 'reading_set.txt',
+      path: 'reading_set.txt',
+      sourceType: 'txt',
+      content: [
+        '[18]',
+        'First English sentence.',
+        '',
+        '[우리말 해석]',
+        '첫 번째 영어 문장이다.',
+        '---',
+        '[19]',
+        'Second English sentence.',
+      ].join('\n'),
+      sizeBytes: 120,
+      addedAt: 1,
+    };
+
+    await useProfilerStore.getState().addTargetFiles([bilingualSetFile]);
+
+    const st = useProfilerStore.getState();
+    // Target file content stored for profiling/word-count must exclude [우리말 해석] Korean text
+    expect(st.targetFiles[0].content).toBe(
+      '[18]\nFirst English sentence.\n---\n[19]\nSecond English sentence.',
+    );
+    expect(st.activeProfile?.originalText).toBe('First English sentence.');
+    expect(st.savedTranslations['bi1#p0']?.koreanFullText).toBe(
+      '첫 번째 영어 문장이다.',
+    );
+    expect(st.savedTranslations['bi1#p1']).toBeUndefined();
+
+    // Active passage export includes [우리말 해석]
+    const activeExport = st.buildActivePassageTxtContent();
+    expect(activeExport.hasTranslation).toBe(true);
+    expect(activeExport.text).toBe(
+      'First English sentence.\n\n[우리말 해석]\n첫 번째 영어 문장이다.',
+    );
+
+    // Edit passage 2's translation manually and export full set
+    await st.stepActivePassage('next');
+    useProfilerStore.getState().saveEditedBilingualPairs([
+      {
+        index: 0,
+        paragraphIndex: 0,
+        en: 'Second English sentence.',
+        ko: '두 번째 영어 문장이다.',
+      },
+    ]);
+
+    const fullExport = useProfilerStore.getState().buildFullPassageSetTxtContent();
+    expect(fullExport.translatedCount).toBe(2);
+    expect(fullExport.text).toContain('[우리말 해석]\n첫 번째 영어 문장이다.');
+    expect(fullExport.text).toContain('[우리말 해석]\n두 번째 영어 문장이다.');
   });
 });

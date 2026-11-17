@@ -42,26 +42,30 @@ function normalizeRelation(raw: unknown): MorphRelationKind {
   return 'family_member';
 }
 
+interface RawMorphologyCandidate {
+  form?: string;
+  f?: string;
+  relation?: string;
+  r?: string;
+  noteKo?: string;
+  n?: string;
+}
+
 interface RawMorphologyLlmResponse {
   contextPos?: string;
   explanationKo?: string;
-  candidates?: {
-    form?: string;
-    relation?: string;
-    noteKo?: string;
-  }[];
+  candidates?: RawMorphologyCandidate[];
 }
 
 export async function analyzeMorphologyAndRoots(params: {
   profile: DocumentProfileResult;
   tokenIdx: number;
   targetMaxLevel: number;
-  verifierCtx: CompiledVerifierContext;
+  verifierCtx: CompiledVerifierContext | Promise<CompiledVerifierContext>;
   config: OpenRouterConfig;
   signal?: AbortSignal;
 }): Promise<MorphologyAnalysisResult> {
-  const { profile, tokenIdx, targetMaxLevel, verifierCtx, config, signal } =
-    params;
+  const { profile, tokenIdx, targetMaxLevel, config, signal } = params;
   const tok = profile.tokens[tokenIdx];
   if (!tok) {
     throw new Error('선택된 단어 정보를 찾을 수 없습니다.');
@@ -69,43 +73,33 @@ export async function analyzeMorphologyAndRoots(params: {
 
   const enclosing = extractEnclosingSentenceSpan(profile, tokenIdx, tokenIdx);
 
-  const raw = await callOpenRouterJson<RawMorphologyLlmResponse>({
-    config,
-    temperature: 0.1,
-    maxTokens: 1200,
-    signal,
-    messages: [
-      {
-        role: 'system',
-        content:
-          'You are an expert English morphologist and EFL lexicographer. Return ONLY valid raw JSON without markdown fences.',
-      },
-      {
-        role: 'user',
-        content: [
-          `Target word: "${tok.token}"`,
-          `Sentence context: "${enclosing.sentenceWithPunct}"`,
-          '',
-          'Analyze the morphological structure of the target word in this sentence and list standalone English dictionary words that serve as its inflectional base (lemma), derivational base(s), free root word(s), compound parts (if compound), and core word-family headword.',
-          'Do NOT output bound Latin/Greek stems that are not real standalone English words (e.g., output "precede" and "precedent", NOT "-ced-").',
-          'Keep explanationKo and noteKo concise (1 short sentence). Output raw JSON only without markdown fences.',
-          '',
-          'Return JSON with exact keys:',
-          '{',
-          '  "contextPos": "Korean + English POS label in this sentence, e.g. 부사 (Adverb)",',
-          '  "explanationKo": "Concise 1-2 sentence Korean explanation of how this word is formed from its base/root",',
-          '  "candidates": [',
-          '    {',
-          '      "form": "standalone English word in lowercase (unless proper noun)",',
-          '      "relation": "lemma | derivational_base | root | compound_part | family_member",',
-          '      "noteKo": "Brief Korean meaning & morphological role"',
-          '    }',
-          '  ]',
-          '}',
-        ].join('\n'),
-      },
-    ],
-  });
+  const [raw, verifierCtx] = await Promise.all([
+    callOpenRouterJson<RawMorphologyLlmResponse>({
+      config,
+      temperature: 0.1,
+      maxTokens: 650,
+      signal,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'English morphologist & EFL lexicographer. Output one raw RFC 8259 JSON object only without markdown fences.',
+        },
+        {
+          role: 'user',
+          content: [
+            `Word: "${tok.token}"`,
+            `Sentence: "${enclosing.sentenceWithPunct}"`,
+            'List up to 5 standalone English dictionary words serving as its lemma, derivational base(s), free root(s), compound parts, or family headword (NO bound Latin/Greek stems like "-ced-").',
+            'Keep explanationKo (1 sentence) and n (<=8 Korean words) concise.',
+            'JSON schema:',
+            '{ "contextPos": "한글 (English)", "explanationKo": "1문장 형성 설명", "candidates": [{ "f": "lowercase word", "r": "lemma|derivational_base|root|compound_part|family_member", "n": "짧은 뜻과 역할" }] }',
+          ].join('\n'),
+        },
+      ],
+    }),
+    Promise.resolve(params.verifierCtx),
+  ]);
 
   const seenForms = new Set<string>();
   const verifiedCandidates: VerifiedMorphCandidate[] = [];
@@ -134,11 +128,21 @@ export async function analyzeMorphologyAndRoots(params: {
   };
 
   for (const c of raw.candidates ?? []) {
-    if (typeof c?.form === 'string') {
+    const formStr =
+      typeof c?.form === 'string'
+        ? c.form
+        : typeof c?.f === 'string'
+          ? c.f
+          : '';
+    if (formStr) {
       pushCandidate(
-        c.form,
-        normalizeRelation(c.relation),
-        typeof c.noteKo === 'string' ? c.noteKo : '',
+        formStr,
+        normalizeRelation(c?.relation ?? c?.r),
+        typeof c?.noteKo === 'string'
+          ? c.noteKo
+          : typeof c?.n === 'string'
+            ? c.n
+            : '',
       );
     }
   }
@@ -174,21 +178,28 @@ type RawSynonymItem =
       replacementText?: string;
       replacement?: string;
       word?: string;
+      w?: string;
       baseForm?: string;
+      b?: string;
       meaningKo?: string;
+      m?: string;
       nuanceKo?: string;
+      n?: string;
     };
 
 type RawParaphraseItem =
   | string
   | {
       styleLabelKo?: string;
+      s?: string;
       rewrittenText?: string;
       sentence?: string;
       paraphrase?: string;
       text?: string;
       rewrite?: string;
+      r?: string;
       noteKo?: string;
+      k?: string;
     };
 
 interface RawCombinedLlmResponse {
@@ -275,12 +286,32 @@ function extractSynonymText(item: RawSynonymItem): {
         ? item.replacement
         : typeof item.word === 'string'
           ? item.word
-          : '';
+          : typeof item.w === 'string'
+            ? item.w
+            : '';
+  const baseForm =
+    typeof item.baseForm === 'string'
+      ? item.baseForm
+      : typeof item.b === 'string'
+        ? item.b
+        : undefined;
+  const meaningKo =
+    typeof item.meaningKo === 'string'
+      ? item.meaningKo
+      : typeof item.m === 'string'
+        ? item.m
+        : undefined;
+  const nuanceKo =
+    typeof item.nuanceKo === 'string'
+      ? item.nuanceKo
+      : typeof item.n === 'string'
+        ? item.n
+        : undefined;
   return {
     replacementText: raw.trim(),
-    baseForm: typeof item.baseForm === 'string' ? item.baseForm : undefined,
-    meaningKo: typeof item.meaningKo === 'string' ? item.meaningKo : undefined,
-    nuanceKo: typeof item.nuanceKo === 'string' ? item.nuanceKo : undefined,
+    baseForm,
+    meaningKo,
+    nuanceKo,
   };
 }
 
@@ -310,14 +341,25 @@ function extractParaphraseEntry(item: RawParaphraseItem): {
             ? item.text
             : typeof item.rewrite === 'string'
               ? item.rewrite
-              : '';
+              : typeof item.r === 'string'
+                ? item.r
+                : '';
+  const styleLabel =
+    typeof item.styleLabelKo === 'string' && item.styleLabelKo.trim()
+      ? item.styleLabelKo.trim()
+      : typeof item.s === 'string' && item.s.trim()
+        ? item.s.trim()
+        : '패러프레이즈 대안';
+  const note =
+    typeof item.noteKo === 'string'
+      ? item.noteKo.trim()
+      : typeof item.k === 'string'
+        ? item.k.trim()
+        : '';
   return {
     rewrittenText: raw.trim(),
-    styleLabelKo:
-      typeof item.styleLabelKo === 'string' && item.styleLabelKo.trim()
-        ? item.styleLabelKo.trim()
-        : '패러프레이즈 대안',
-    noteKo: typeof item.noteKo === 'string' ? item.noteKo.trim() : '',
+    styleLabelKo: styleLabel,
+    noteKo: note,
   };
 }
 
@@ -431,6 +473,52 @@ function evaluateSynonymCandidates(params: {
   return { verified, rejectedForms };
 }
 
+const CORE_ANCHOR_CANDIDATES = [
+  'simple',
+  'clear',
+  'basic',
+  'common',
+  'main',
+  'key',
+  'direct',
+  'steady',
+  'exact',
+  'easy',
+  'plain',
+  'change',
+  'show',
+  'help',
+  'make',
+  'use',
+  'keep',
+  'grow',
+  'form',
+  'link',
+  'part',
+  'view',
+  'rule',
+  'state',
+  'group',
+  'level',
+  'way',
+  'idea',
+] as const;
+
+function sampleCoreAllowedAnchors(
+  ctx: CompiledVerifierContext,
+  targetMaxLevel: number,
+): string[] {
+  const hits: string[] = [];
+  for (const w of CORE_ANCHOR_CANDIDATES) {
+    const key = ctx.settings.ignoreCase ? w.toLowerCase() : w;
+    const hit = ctx.compiled.lookup.get(key);
+    if (hit && hit.kind === 'level' && hit.statLevelNumber <= targetMaxLevel) {
+      hits.push(w);
+    }
+  }
+  return hits.slice(0, 14);
+}
+
 function describeAllowedLists(ctx: CompiledVerifierContext): string {
   if (ctx.compiled.parsedLists.length === 0) {
     return 'Basic high-frequency core English';
@@ -449,6 +537,10 @@ function parseCombinedResponse(raw: unknown): RawCombinedLlmResponse {
   }
   let obj = raw as Record<string, unknown>;
   const hasTopLevelKeys =
+    obj.a !== undefined ||
+    obj.b !== undefined ||
+    obj.c !== undefined ||
+    obj.d !== undefined ||
     obj.inListSynonyms !== undefined ||
     obj.freeSynonyms !== undefined ||
     obj.outOfListSynonyms !== undefined ||
@@ -472,19 +564,25 @@ function parseCombinedResponse(raw: unknown): RawCombinedLlmResponse {
   }
 
   const inListSynonyms =
+    obj.a ??
     obj.inListSynonyms ??
     obj.synonyms ??
     obj.replacements ??
     obj.synonymCandidates;
   const freeSynonyms =
-    obj.freeSynonyms ?? obj.outOfListSynonyms ?? obj.unconstrainedSynonyms;
+    obj.b ??
+    obj.freeSynonyms ??
+    obj.outOfListSynonyms ??
+    obj.unconstrainedSynonyms;
   const inListParaphrases =
+    obj.c ??
     obj.inListParaphrases ??
     obj.paraphrases ??
     obj.paraphraseCandidates ??
     obj.rewrites ??
     obj.sentences;
   const freeParaphrases =
+    obj.d ??
     obj.freeParaphrases ??
     obj.outOfListParaphrases ??
     obj.unconstrainedParaphrases;
@@ -628,8 +726,13 @@ export async function suggestReplacementsAndParaphrases(params: {
   const targetLine = isMultiWord
     ? `Target expression: "${targetText}"`
     : `Target word: "${targetText}"`;
-  const wordsToReplaceSample = guidance.wordsToReplace.slice(0, 12);
-  const allowedWordsSample = guidance.allowedWordsInSpan.slice(0, 24);
+  const wordsToReplaceSample = guidance.wordsToReplace.slice(0, 10);
+  const allowedWordsSample = Array.from(
+    new Set([
+      ...guidance.allowedWordsInSpan,
+      ...sampleCoreAllowedAnchors(verifierCtx, targetMaxLevel),
+    ]),
+  ).slice(0, 24);
 
   const buildAuditedSlotParaphrase = (
     syn: VerifiedSynonymCandidate,
@@ -669,13 +772,13 @@ export async function suggestReplacementsAndParaphrases(params: {
     await callOpenRouterJson<unknown>({
       config,
       temperature: 0.2,
-      maxTokens: 3200,
+      maxTokens: 1400,
       signal,
       messages: [
         {
           role: 'system',
           content:
-            'EFL lexical & paraphrase assistant. Generate BOTH strict word-list-controlled candidates AND natural unconstrained candidates. Output one raw RFC 8259 JSON object only.',
+            'EFL lexical & paraphrase assistant. Output one compact raw RFC 8259 JSON object only without markdown fences.',
         },
         {
           role: 'user',
@@ -684,27 +787,27 @@ export async function suggestReplacementsAndParaphrases(params: {
             `Sentence: "${enclosing.sentenceWithPunct}"`,
             `Allowed lists: ${levelDesc}`,
             !verifierCtx.masterEnabled
-              ? 'Word-family expansion OFF for inList*: prefer base/singular forms (student, word, help).'
+              ? 'Word-family OFF for a/c: prefer base/singular forms.'
               : '',
             wordsToReplaceSample.length > 0
-              ? `For inListParaphrases, avoid/replace out-of-list words: [${wordsToReplaceSample.join(', ')}]`
+              ? `Avoid in c: [${wordsToReplaceSample.join(', ')}]`
               : '',
             allowedWordsSample.length > 0
-              ? `Safe in-list words: [${allowedWordsSample.join(', ')}]`
+              ? `Safe core words: [${allowedWordsSample.join(', ')}]`
               : '',
             'JSON schema:',
             '{',
-            '  "inListSynonyms": [{ "replacementText": "in-list replacement", "baseForm": "lemma", "meaningKo": "핵심 뜻", "nuanceKo": "뉘앙스" }],',
-            '  "freeSynonyms": [{ "replacementText": "unconstrained natural replacement", "baseForm": "lemma", "meaningKo": "핵심 뜻", "nuanceKo": "뉘앙스" }],',
-            '  "inListParaphrases": [{ "styleLabelKo": "쉬운 기초어휘 풀이 | 자연스러운 표준 표현 | 원문 구조 유지 최소 수정", "rewrittenText": "sentence using ONLY allowed lists", "noteKo": "짧은 설명" }],',
-            '  "freeParaphrases": [{ "styleLabelKo": "자연스러운 확장 표현 | 정교한 의미 전달 | 학술·심화 재구성", "rewrittenText": "natural sentence including unlisted words", "noteKo": "짧은 설명" }]',
+            '  "a": [{ "w": "in-list replacement", "b": "lemma", "m": "핵심 뜻", "n": "짧은 뉘앙스" }],',
+            '  "b": [{ "w": "unconstrained natural replacement", "b": "lemma", "m": "핵심 뜻", "n": "짧은 뉘앙스" }],',
+            '  "c": [{ "s": "쉬운 기초 풀이", "r": "sentence using ONLY Allowed lists", "k": "짧은 설명" }],',
+            '  "d": [{ "s": "자연스러운 확장", "r": "natural sentence including unlisted words", "k": "짧은 설명" }]',
             '}',
             'Rules:',
-            `- inListSynonyms: 5 ${isMultiWord ? 'short (1-4 word)' : 'single-word'} replacements strictly inside Allowed lists.`,
-            `- freeSynonyms: 5 distinct ${isMultiWord ? 'short (1-4 word)' : 'single-word'} contextually accurate replacements NOT restricted to Allowed lists (prefer natural words outside Allowed lists).`,
-            '- inListParaphrases: 4 distinct sentences different from Sentence using ONLY Allowed lists.',
-            '- freeParaphrases: 4 distinct natural sentences different from Sentence and inListParaphrases, freely including expressive/academic words outside Allowed lists.',
-            '- Keep meaningKo/nuanceKo/noteKo <= 10 words.',
+            `- a: 4 ${isMultiWord ? 'short (1-4 word)' : 'single-word'} replacements strictly inside Allowed lists.`,
+            `- b: 3 distinct ${isMultiWord ? 'short (1-4 word)' : 'single-word'} contextually accurate replacements NOT restricted to Allowed lists.`,
+            '- c: 3 distinct sentences different from Sentence using ONLY Allowed lists.',
+            '- d: 3 distinct natural sentences different from Sentence and c, freely using expressive words outside Allowed lists.',
+            '- Keep m/n/k <= 6 Korean words.',
           ]
             .filter(Boolean)
             .join('\n'),
@@ -748,44 +851,41 @@ export async function suggestReplacementsAndParaphrases(params: {
       await callOpenRouterJson<unknown>({
         config,
         temperature: 0.15,
-        maxTokens: 1400,
+        maxTokens: 650,
         signal,
         messages: [
           {
             role: 'system',
             content:
-              'You are a strict lexical-control editor. Use ONLY ultra-basic core English (top 1,000 words). Output ONLY one raw RFC 8259 JSON object without markdown fences.',
+              'Strict lexical-control editor. Use ONLY ultra-basic core English (top 1,000 words). Output one raw RFC 8259 JSON object only without markdown fences.',
           },
           {
             role: 'user',
             content: [
               targetLine,
               `Sentence: "${enclosing.sentenceWithPunct}"`,
-              `Allowed vocabulary: ${levelDesc}`,
+              `Allowed: ${levelDesc}`,
               !verifierCtx.masterEnabled
-                ? 'Word-family expansion is OFF: prefer base/singular forms.'
+                ? 'Word-family OFF: prefer base/singular forms.'
                 : '',
               needSynonymRepair && rejectedSyn
-                ? `Rejected replacements (NOT in the lists — do not reuse): ${rejectedSyn}`
+                ? `Do not reuse: ${rejectedSyn}`
                 : '',
               needParaphraseRepair && rejectedPara
-                ? `Out-of-list words that MUST NOT appear: ${rejectedPara}`
+                ? `Forbidden out-words: ${rejectedPara}`
                 : '',
-              '',
-              'Return ONLY valid RFC 8259 JSON with exact keys:',
+              'JSON:',
               '{',
               needSynonymRepair
-                ? '  "inListSynonyms": [{ "replacementText": "word", "baseForm": "lemma", "meaningKo": "뜻", "nuanceKo": "어감" }],'
-                : '  "inListSynonyms": [],',
+                ? '  "a": [{ "w": "word", "b": "lemma", "m": "뜻", "n": "어감" }],'
+                : '  "a": [],',
               needParaphraseRepair
-                ? '  "inListParaphrases": [{ "styleLabelKo": "쉬운 기초어휘 풀이", "rewrittenText": "Full sentence.", "noteKo": "설명" }]'
-                : '  "inListParaphrases": []',
+                ? '  "c": [{ "s": "쉬운 기초 풀이", "r": "Full sentence.", "k": "설명" }]'
+                : '  "c": []',
               '}',
-              needSynonymRepair
-                ? 'Provide 5 much simpler in-list replacements.'
-                : '',
+              needSynonymRepair ? 'Provide 3 simpler in-list words in a.' : '',
               needParaphraseRepair
-                ? 'Provide 3 full-sentence paraphrases using ultra-basic core English and allowed vocabulary. Each rewrittenText MUST differ from Sentence.'
+                ? 'Provide 2 ultra-basic paraphrases in c different from Sentence.'
                 : '',
             ]
               .filter(Boolean)
@@ -905,25 +1005,22 @@ export async function suggestReplacementsAndParaphrases(params: {
       const rescueRaw = await callOpenRouterJson<unknown>({
         config,
         temperature: 0.25,
-        maxTokens: 1200,
+        maxTokens: 650,
         signal,
         messages: [
           {
             role: 'system',
             content:
-              'You are a helpful EFL writing assistant. Rewrite the given sentence into clear, simple English paraphrases. Output ONLY one raw RFC 8259 JSON object without markdown fences.',
+              'EFL writing assistant. Rewrite Sentence into simple English paraphrases. Output one raw RFC 8259 JSON object only without markdown fences.',
           },
           {
             role: 'user',
             content: [
-              `Original sentence: "${enclosing.sentenceWithPunct}"`,
-              `Focus word/expression to clarify: "${targetText}"`,
-              `Target learner vocabulary: ${levelDesc}`,
-              '',
-              'Rewrite the original sentence into 3 clear English sentences that preserve its meaning using simpler everyday wording.',
-              'Each rewrittenText MUST be different from Original sentence.',
-              'Return ONLY valid JSON:',
-              '{ "inListParaphrases": [{ "styleLabelKo": "쉬운 문장 재구성", "rewrittenText": "Simple rewritten sentence.", "noteKo": "간단한 한국어 설명" }] }',
+              `Sentence: "${enclosing.sentenceWithPunct}"`,
+              `Focus: "${targetText}"`,
+              `Allowed: ${levelDesc}`,
+              'Provide 3 simple English sentences different from Sentence:',
+              '{ "c": [{ "s": "쉬운 문장 재구성", "r": "Simple sentence.", "k": "짧은 설명" }] }',
             ].join('\n'),
           },
         ],

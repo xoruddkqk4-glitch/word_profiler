@@ -441,6 +441,7 @@ export function parsePassageSet(rawContent: string): PassageItem[] {
   }
 
   // 3. Priority 3: 2 or More Consecutive Blank Lines (\n\n\n+)
+  const savedTranslationHeaderRe = /^[ \t]*\[우리말\s*해석\][ \t]*$/u;
   const blocks: { startLine: number; endLine: number }[] = [];
   let idx = 0;
   while (idx < lines.length) {
@@ -475,7 +476,14 @@ export function parsePassageSet(rawContent: string): PassageItem[] {
       idx = blankEnd;
     }
 
-    blocks.push({ startLine: blockStart, endLine: blockEnd });
+    if (
+      blocks.length > 0 &&
+      savedTranslationHeaderRe.test(lines[blockStart].text)
+    ) {
+      blocks[blocks.length - 1].endLine = blockEnd;
+    } else {
+      blocks.push({ startLine: blockStart, endLine: blockEnd });
+    }
   }
 
   if (blocks.length >= 2) {

@@ -8,6 +8,7 @@ import {
   Edit3,
   Eye,
   FolderOpen,
+  Languages,
   Minus,
   Plus,
   Redo2,
@@ -26,6 +27,7 @@ import {
   readTargetFilesFromBrowser,
 } from '../../io/fileReaders';
 import {
+  getPassageTranslationSlotKey,
   resolveActivePassageContext,
   useProfilerStore,
 } from '../../store/useProfilerStore';
@@ -62,7 +64,14 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
     ],
   );
 
-  const { isInline, activePassage } = passageCtx;
+  const { isInline, activeFile, activePassage, activePassageIndex } = passageCtx;
+  const activeSlotKey = getPassageTranslationSlotKey(
+    activeFile?.id ?? null,
+    activePassageIndex,
+  );
+  const hasSavedTranslation = Boolean(
+    store.savedTranslations[activeSlotKey]?.koreanFullText.trim(),
+  );
   const canUndo = store.canUndoActiveDocument();
   const canRedo = store.canRedoActiveDocument();
 
@@ -346,6 +355,27 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           onClick={() => store.adjustFontSize(1)}
         >
           <Plus size={15} />
+        </button>
+
+        <span className="toolbar-sep" />
+
+        <button
+          type="button"
+          className="btn btn-sm bilingual-open-btn"
+          data-has-saved={hasSavedTranslation ? 'true' : 'false'}
+          disabled={!editableText.trim() && !hasSavedTranslation}
+          title={
+            hasSavedTranslation
+              ? '영어/우리말 대조 창 열기 (저장된 우리말 해석 있음)'
+              : '영어 텍스트를 AI로 해석하여 영어/우리말 대조 창으로 엽니다'
+          }
+          onClick={() => void store.openBilingualModal()}
+        >
+          <Languages size={15} />
+          <span>영어/우리말</span>
+          {hasSavedTranslation && (
+            <span className="bilingual-saved-dot" aria-hidden="true" />
+          )}
         </button>
       </div>
 

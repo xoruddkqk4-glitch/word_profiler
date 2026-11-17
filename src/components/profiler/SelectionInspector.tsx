@@ -25,6 +25,14 @@ export const SelectionInspector: React.FC = () => {
   const levelDisplay = !wordStats
     ? '—'
     : wordStats.kind === 'level'
+      ? `L${wordStats.activeLevelIndex + 1} · ${wordStats.listName}`
+      : wordStats.kind === 'ignored'
+        ? 'Ignored'
+        : 'Out of lists';
+
+  const levelFullTitle = !wordStats
+    ? '미선택'
+    : wordStats.kind === 'level'
       ? `Level ${wordStats.activeLevelIndex + 1} (${wordStats.listName})`
       : wordStats.kind === 'ignored'
         ? 'Ignored'
@@ -58,49 +66,74 @@ export const SelectionInspector: React.FC = () => {
       <div className="inspector-block">
         <div className="section-header inspector-top-header">
           <h3 className="section-title">Selection Inspector</h3>
-          {isPhraseSelection && span && (
+          {isPhraseSelection && span ? (
             <span className="count-badge tabular-nums">
               {span.endTokenIdx - span.startTokenIdx + 1} words
             </span>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-sm inspector-ignore-btn"
+              disabled={!canAddSelectedToIgnore}
+              title="선택한 단어를 Ignore 목록에 추가"
+              onClick={() => {
+                if (wordKey) void store.addExtraIgnoreWord(wordKey);
+              }}
+            >
+              <Plus size={13} /> Add to Ignore
+            </button>
           )}
         </div>
 
-        <div className="inspector-kv-list">
-          <span className="inspector-k">Selection:</span>
-          <span className="inspector-v inspector-selection-preview">
-            {store.selectedRawToken || '단어 클릭 또는 구문 드래그'}
-          </span>
-
-          {!isPhraseSelection && (
+        <div className="inspector-kv-grid">
+          {isPhraseSelection ? (
+            <div className="inspector-kv-cell" data-full="true">
+              <span className="inspector-k">Selection:</span>
+              <span
+                className="inspector-v inspector-selection-preview"
+                title={store.selectedRawToken || undefined}
+              >
+                {store.selectedRawToken || '단어 클릭 또는 구문 드래그'}
+              </span>
+            </div>
+          ) : (
             <>
-              <span className="inspector-k">Count:</span>
-              <span className="inspector-v tabular-nums">
-                {wordStats ? `${wordStats.count} (${pctText}%)` : '—'}
-              </span>
+              <div className="inspector-kv-cell">
+                <span className="inspector-k">Selection:</span>
+                <span
+                  className="inspector-v"
+                  title={store.selectedRawToken || '단어 클릭 또는 구문 드래그'}
+                >
+                  {store.selectedRawToken || '미선택'}
+                </span>
+              </div>
 
-              <span className="inspector-k">Level:</span>
-              <span className="inspector-v">{levelDisplay}</span>
+              <div className="inspector-kv-cell">
+                <span className="inspector-k">Count:</span>
+                <span className="inspector-v tabular-nums">
+                  {wordStats ? `${wordStats.count} (${pctText}%)` : '—'}
+                </span>
+              </div>
 
-              <span className="inspector-k">Headword:</span>
-              <span className="inspector-v">
-                {wordStats ? wordStats.headword : '—'}
-              </span>
+              <div className="inspector-kv-cell">
+                <span className="inspector-k">Level:</span>
+                <span className="inspector-v" title={levelFullTitle}>
+                  {levelDisplay}
+                </span>
+              </div>
+
+              <div className="inspector-kv-cell">
+                <span className="inspector-k">Headword:</span>
+                <span
+                  className="inspector-v"
+                  title={wordStats ? wordStats.headword : undefined}
+                >
+                  {wordStats ? wordStats.headword : '—'}
+                </span>
+              </div>
             </>
           )}
         </div>
-
-        {!isPhraseSelection && (
-          <button
-            type="button"
-            className="btn btn-sm ai-full-btn"
-            disabled={!canAddSelectedToIgnore}
-            onClick={() => {
-              if (wordKey) void store.addExtraIgnoreWord(wordKey);
-            }}
-          >
-            <Plus size={15} /> Add to Ignore List
-          </button>
-        )}
       </div>
 
       {/* Inspector Body Switcher: AI Assistant vs Extra Ignore Words */}

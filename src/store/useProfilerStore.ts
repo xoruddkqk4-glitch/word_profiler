@@ -16,6 +16,15 @@ import {
   saveOpenRouterConfig,
 } from '../ai/openRouterClient';
 import {
+  hydrateSavedPassageTranslation,
+  loadSavedTranslationPrompt,
+  lookupCachedTranslationResult,
+  resetTranslationPromptToDefault,
+  saveAlignmentCacheEntry,
+  saveTranslationPrompt,
+  translateEnglishPassage,
+} from '../ai/passageTranslationService';
+import {
   DEFAULT_IGNORE_COLOR,
   DEFAULT_OUT_HIGHLIGHT_COLOR,
   ensureReadableOnDark,
@@ -29,17 +38,26 @@ import {
 } from '../core/wordlistParser';
 import {
   parsePassageSet,
+  reconstructPassageSet,
   updatePassageContentAt,
   type PassageItem,
 } from '../core/passageSetParser';
 import {
+  assembleKoreanFullTextFromPairs,
+  extractSavedTranslationFromPassage,
+  formatPassageWithSavedTranslation,
+} from '../core/sentenceSegmenter';
+import { exportRawTextAsTxt } from '../io/docExporters';
+import {
   getActiveAiModelId,
   getActiveAiProvider,
   hasActiveAiApiKey,
+  type BilingualSentencePair,
   type CombinedSuggestionResult,
   type InspectorBodyTab,
   type MorphologyAnalysisResult,
   type OpenRouterConfig,
+  type SavedPassageTranslation,
   type SettingsSectionId,
   type TokenSpanSelection,
 } from '../types/ai';
@@ -184,6 +202,7 @@ let profileJobEpoch = 0;
 let statsJobEpoch = 0;
 let initAppPromise: Promise<void> | null = null;
 let activeAiAbortController: AbortController | null = null;
+let activeBilingualAbortController: AbortController | null = null;
 const MAX_AI_SUGGESTION_CACHE = 32;
 const aiSuggestionCache = new Map<string, CombinedSuggestionResult>();
 
@@ -194,6 +213,39 @@ function cancelActiveAiCall(): boolean {
     return true;
   }
   return false;
+}
+
+function cancelActiveBilingualCall(): boolean {
+  if (activeBilingualAbortController) {
+    activeBilingualAbortController.abort();
+    activeBilingualAbortController = null;
+    return true;
+  }
+  return false;
+}
+
+export function getPassageTranslationSlotKey(
+  fileId: string | null,
+  passageIndex: number,
+): string {
+  return `${fileId ?? '__inline__'}#p${passageIndex}`;
+}
+
+function removeTranslationSlotsForPrefix(
+  map: Record<string, SavedPassageTranslation>,
+  fileId: string | null,
+): Record<string, SavedPassageTranslation> {
+  const prefix = `${fileId ?? '__inline__'}#p`;
+  let changed = false;
+  const next: Record<string, SavedPassageTranslation> = {};
+  for (const [k, v] of Object.entries(map)) {
+    if (k.startsWith(prefix)) {
+      changed = true;
+    } else {
+      next[k] = v;
+    }
+  }
+  return changed ? next : map;
 }
 
 function countParsedWordlistEntries(
@@ -295,6 +347,14 @@ export interface ProfilerStoreState {
   aiSuggestionModalOpen: boolean;
   combinedSuggestionResult: CombinedSuggestionResult | null;
   lastAddedReferenceListId: string | null;
+
+  // Bilingual English/Korean Translation State
+  bilingualModalOpen: boolean;
+  bilingualLoading: boolean;
+  bilingualProgress: { done: number; total: number } | null;
+  bilingualError: string | null;
+  translationPrompt: string;
+  savedTranslations: Record<string, SavedPassageTranslation>;
 
   // Actions
   initializeApp: () => Promise<void>;
@@ -415,6 +475,29 @@ export interface ProfilerStoreState {
     forceRefresh?: boolean;
   }) => Promise<void>;
   closeAiSuggestionModal: () => void;
+
+  // Bilingual English/Korean Translation Actions
+  openBilingualModal: (options?: {
+    forceRetranslate?: boolean;
+  }) => Promise<void>;
+  closeBilingualModal: () => void;
+  cancelBilingualRequest: () => void;
+  updateTranslationPrompt: (nextPrompt: string) => void;
+  resetTranslationPrompt: () => void;
+  saveEditedBilingualPairs: (pairs: BilingualSentencePair[]) => void;
+  removeSavedTranslationForActivePassage: () => void;
+  buildActivePassageTxtContent: () => {
+    text: string;
+    fileNameStem: string;
+    hasTranslation: boolean;
+  };
+  buildFullPassageSetTxtContent: () => {
+    text: string;
+    fileNameStem: string;
+    translatedCount: number;
+  };
+  exportActivePassageTxt: () => void;
+  exportFullPassageSetTxt: () => void;
 }
 
 function computeSearchMatches(
@@ -735,6 +818,13 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     aiSuggestionModalOpen: false,
     combinedSuggestionResult: null,
     lastAddedReferenceListId: null,
+
+    bilingualModalOpen: false,
+    bilingualLoading: false,
+    bilingualProgress: null,
+    bilingualError: null,
+    translationPrompt: loadSavedTranslationPrompt(),
+    savedTranslations: {},
 
     initializeApp: async () => {
       if (get().initialized) return;
@@ -1343,21 +1433,60 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
 
     addTargetFiles: async (items) => {
       if (items.length === 0) return;
+      const nextTranslations = { ...get().savedTranslations };
+      let restoredTranslationCount = 0;
+
+      const cleanedItems: TargetFileItem[] = items.map((item) => {
+        const passages = parsePassageSet(item.content);
+        let modified = false;
+        const cleanedPassages = passages.map((p) => {
+          const extracted = extractSavedTranslationFromPassage(p.content);
+          if (extracted.koreanContent !== null) {
+            modified = true;
+            restoredTranslationCount += 1;
+            const slotKey = getPassageTranslationSlotKey(item.id, p.index);
+            nextTranslations[slotKey] = hydrateSavedPassageTranslation(
+              extracted.englishContent,
+              extracted.koreanContent,
+              '파일에서 불러옴',
+            );
+            return { ...p, content: extracted.englishContent };
+          }
+          return p;
+        });
+
+        if (!modified) return item;
+        const nextContent =
+          cleanedPassages.length <= 1
+            ? cleanedPassages[0].content
+            : reconstructPassageSet(cleanedPassages);
+        return {
+          ...item,
+          content: nextContent,
+          sizeBytes: new Blob([nextContent]).size,
+        };
+      });
+
       const prev = get().targetFiles;
-      const next = [...prev, ...items];
+      const next = [...prev, ...cleanedItems];
       const nextHistories = { ...get().fileHistories };
       const nextPassageIndices = { ...get().filePassageIndices };
-      for (const it of items) {
+      for (const it of cleanedItems) {
         nextHistories[it.id] = { stack: [it.content], index: 0 };
         nextPassageIndices[it.id] = 0;
       }
-      const firstId = items[0].id;
-      const firstPassages = parsePassageSet(items[0].content);
+      const firstId = cleanedItems[0].id;
+      const firstPassages = parsePassageSet(cleanedItems[0].content);
       abortAndResetAiSession();
+      cancelActiveBilingualCall();
       set({
         targetFiles: next,
         fileHistories: nextHistories,
         filePassageIndices: nextPassageIndices,
+        savedTranslations: nextTranslations,
+        bilingualLoading: false,
+        bilingualProgress: null,
+        bilingualError: null,
         selectedTargetIds: [firstId],
         activeTargetFileId: firstId,
         inlineEditorOpen: false,
@@ -1371,8 +1500,10 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         statsStale: true,
         statusMessage:
           firstPassages.length > 1
-            ? `세트 파일 로드됨: ${items[0].name} (총 ${firstPassages.length}개 문항 감지 — 이전/다음 문항 버튼으로 이동 가능)`
-            : `${items.length}개 타겟 파일 로드됨`,
+            ? `세트 파일 로드됨: ${cleanedItems[0].name} (총 ${firstPassages.length}개 문항 감지${restoredTranslationCount > 0 ? ` · 저장된 우리말 해석 ${restoredTranslationCount}건 복원` : ' — 이전/다음 문항 버튼으로 이동 가능'})`
+            : restoredTranslationCount > 0
+              ? `${cleanedItems.length}개 타겟 파일 로드됨 (저장된 우리말 해석 ${restoredTranslationCount}건 복원)`
+              : `${cleanedItems.length}개 타겟 파일 로드됨`,
       });
       await get().runProfileActive();
       if (get().activeMainTab === 'statistics') {
@@ -1406,6 +1537,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
 
     openEmptyInlineEditor: () => {
       abortAndResetAiSession();
+      cancelActiveBilingualCall();
       profileJobEpoch += 1;
       set({
         activeTargetFileId: null,
@@ -1415,6 +1547,13 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         inlinePassageIndex: 0,
         inlineHistory: [''],
         inlineHistoryIndex: 0,
+        savedTranslations: removeTranslationSlotsForPrefix(
+          get().savedTranslations,
+          null,
+        ),
+        bilingualLoading: false,
+        bilingualProgress: null,
+        bilingualError: null,
         editorMode: 'edit',
         plainFormatView: false,
         editSelectionText: '',
@@ -1473,6 +1612,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
 
     loadSamplePassage: async () => {
       abortAndResetAiSession();
+      cancelActiveBilingualCall();
       set({
         activeTargetFileId: null,
         selectedTargetIds: [],
@@ -1481,6 +1621,13 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         inlinePassageIndex: 0,
         inlineHistory: [SAMPLE_ENGLISH_PASSAGE],
         inlineHistoryIndex: 0,
+        savedTranslations: removeTranslationSlotsForPrefix(
+          get().savedTranslations,
+          null,
+        ),
+        bilingualLoading: false,
+        bilingualProgress: null,
+        bilingualError: null,
         activeMainTab: 'profiler',
         editorMode: 'profiled',
         plainFormatView: false,
@@ -1501,6 +1648,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         fileHistories,
         filePassageIndices,
         selectedTargetIds,
+        savedTranslations,
       } = get();
       const target = targetFiles.find((f) => f.id === id);
       if (!target) return;
@@ -1511,12 +1659,17 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       const nextPassageIndices = { ...filePassageIndices };
       delete nextPassageIndices[id];
       const nextSelected = selectedTargetIds.filter((x) => x !== id);
+      const nextTranslations = removeTranslationSlotsForPrefix(
+        savedTranslations,
+        id,
+      );
 
       if (activeTargetFileId !== id) {
         set({
           targetFiles: remaining,
           fileHistories: nextHistories,
           filePassageIndices: nextPassageIndices,
+          savedTranslations: nextTranslations,
           selectedTargetIds: nextSelected,
           statsStale: true,
           statusMessage: `'${target.name}' 파일을 닫았습니다.`,
@@ -1525,11 +1678,16 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       }
 
       abortAndResetAiSession();
+      cancelActiveBilingualCall();
       const nextActiveId = remaining[0]?.id ?? null;
       set({
         targetFiles: remaining,
         fileHistories: nextHistories,
         filePassageIndices: nextPassageIndices,
+        savedTranslations: nextTranslations,
+        bilingualLoading: false,
+        bilingualProgress: null,
+        bilingualError: null,
         selectedTargetIds: nextActiveId ? [nextActiveId] : [],
         activeTargetFileId: nextActiveId,
         editSelectionText: '',
@@ -1550,6 +1708,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         activeTargetFileId,
         fileHistories,
         filePassageIndices,
+        savedTranslations,
       } = get();
       if (selectedTargetIds.length === 0) return;
       abortAndResetAiSession();
@@ -1557,12 +1716,20 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       const remaining = targetFiles.filter((f) => !removeSet.has(f.id));
       const nextHistories = { ...fileHistories };
       const nextPassageIndices = { ...filePassageIndices };
+      let nextTranslations = savedTranslations;
       for (const remId of selectedTargetIds) {
         delete nextHistories[remId];
         delete nextPassageIndices[remId];
+        nextTranslations = removeTranslationSlotsForPrefix(
+          nextTranslations,
+          remId,
+        );
       }
       const activeRemoved =
         activeTargetFileId !== null && removeSet.has(activeTargetFileId);
+      if (activeRemoved) {
+        cancelActiveBilingualCall();
+      }
       const nextActiveId = activeRemoved
         ? remaining[0]?.id ?? null
         : activeTargetFileId;
@@ -1571,6 +1738,10 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         targetFiles: remaining,
         fileHistories: nextHistories,
         filePassageIndices: nextPassageIndices,
+        savedTranslations: nextTranslations,
+        ...(activeRemoved
+          ? { bilingualLoading: false, bilingualProgress: null, bilingualError: null }
+          : {}),
         selectedTargetIds: nextActiveId ? [nextActiveId] : [],
         activeTargetFileId: nextActiveId,
         editSelectionText: '',
@@ -1586,10 +1757,23 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
 
     clearAllTargetFiles: async () => {
       abortAndResetAiSession();
+      if (get().activeTargetFileId !== null) {
+        cancelActiveBilingualCall();
+      }
+      const nextTranslations: Record<string, SavedPassageTranslation> = {};
+      for (const [k, v] of Object.entries(get().savedTranslations)) {
+        if (k.startsWith('__inline__#p')) {
+          nextTranslations[k] = v;
+        }
+      }
       set({
         targetFiles: [],
         fileHistories: {},
         filePassageIndices: {},
+        savedTranslations: nextTranslations,
+        ...(get().activeTargetFileId !== null
+          ? { bilingualLoading: false, bilingualProgress: null, bilingualError: null }
+          : {}),
         selectedTargetIds: [],
         activeTargetFileId: null,
         editSelectionText: '',
@@ -2408,7 +2592,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     updateOpenRouterConfig: (next) => {
       aiSuggestionCache.clear();
       const saved = saveOpenRouterConfig(next);
-      set({ openRouterConfig: saved, aiError: null });
+      set({ openRouterConfig: saved, aiError: null, bilingualError: null });
     },
 
     clearOpenRouterKey: () => {
@@ -2591,56 +2775,46 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       });
 
       try {
-        const builtinMaster = await ensureBuiltinMasterRaw();
-        if (controller.signal.aborted) return;
-
-        const latest = get();
-        const profile = latest.activeProfile;
-        if (
-          !profile ||
-          profile.sourceId !== sourceId ||
-          profile.originalText !== sourceOriginalText
-        ) {
-          set({
-            aiLoading: false,
-            aiError:
-              '문서가 변경되어 분석을 시작할 수 없습니다. 단어를 다시 선택한 뒤 시도해 주세요.',
-          });
-          return;
-        }
-        if (
-          tokenIdx < 0 ||
-          tokenIdx >= profile.tokens.length ||
-          latest.referenceLists.filter((r) => r.enabled).length === 0
-        ) {
-          set({
-            aiLoading: false,
-            aiError:
-              '선택 상태나 활성 단어장이 바뀌어 분석을 진행할 수 없습니다.',
-          });
-          return;
-        }
-
-        const verifierCtx = getVerifierContext({
-          referenceLists: latest.referenceLists,
-          ignoreList: latest.ignoreList,
-          extraIgnoreWords: latest.extraIgnoreWords,
-          masterList: latest.masterList,
-          builtinMasterRawContent: builtinMaster,
-          ignoreEnabled: latest.ignoreEnabled,
-          settings: latest.settings,
-        });
+        const verifierCtxPromise = ensureBuiltinMasterRaw().then(
+          (builtinMaster) => {
+            const cur = get();
+            return getVerifierContext({
+              referenceLists: cur.referenceLists,
+              ignoreList: cur.ignoreList,
+              extraIgnoreWords: cur.extraIgnoreWords,
+              masterList: cur.masterList,
+              builtinMasterRawContent: builtinMaster,
+              ignoreEnabled: cur.ignoreEnabled,
+              settings: cur.settings,
+            });
+          },
+        );
 
         const res = await analyzeMorphologyAndRoots({
-          profile,
+          profile: st.activeProfile,
           tokenIdx,
-          targetMaxLevel: activeReferenceLevelCap(latest.referenceLists),
-          verifierCtx,
-          config: latest.openRouterConfig,
+          targetMaxLevel: activeReferenceLevelCap(st.referenceLists),
+          verifierCtx: verifierCtxPromise,
+          config: st.openRouterConfig,
           signal: controller.signal,
         });
 
         if (controller.signal.aborted) return;
+
+        const latest = get();
+        const latestProfile = latest.activeProfile;
+        if (
+          !latestProfile ||
+          latestProfile.sourceId !== sourceId ||
+          latestProfile.originalText !== sourceOriginalText
+        ) {
+          set({
+            aiLoading: false,
+            aiError:
+              '문서가 변경되어 분석 결과를 표시하지 않습니다. 단어를 다시 선택한 뒤 시도해 주세요.',
+          });
+          return;
+        }
         set({ morphologyResult: res, aiLoading: false });
       } catch (err) {
         if (controller.signal.aborted) return;
@@ -2656,6 +2830,327 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
           activeAiAbortController = null;
         }
       }
+    },
+
+    openBilingualModal: async (options) => {
+      const st = get();
+      const ctx = resolveActivePassageContext(st);
+      const cleanEnglish = extractSavedTranslationFromPassage(
+        ctx.activePassage.content,
+      ).englishContent;
+
+      if (!cleanEnglish.trim()) {
+        set({
+          errorBanner: '해석할 영어 텍스트가 없습니다. 지문을 먼저 입력하거나 열어 주세요.',
+        });
+        return;
+      }
+
+      const slotKey = getPassageTranslationSlotKey(
+        ctx.activeFile?.id ?? null,
+        ctx.activePassageIndex,
+      );
+      const existing = st.savedTranslations[slotKey];
+
+      if (
+        options?.forceRetranslate !== true &&
+        existing &&
+        existing.sourceEnglishText.trim() === cleanEnglish.trim()
+      ) {
+        cancelActiveBilingualCall();
+        set({
+          bilingualModalOpen: true,
+          bilingualLoading: false,
+          bilingualProgress: null,
+          bilingualError: null,
+        });
+        return;
+      }
+
+      if (options?.forceRetranslate !== true) {
+        const cached = lookupCachedTranslationResult(
+          cleanEnglish,
+          st.translationPrompt,
+        );
+        if (cached) {
+          cancelActiveBilingualCall();
+          set((cur) => ({
+            bilingualModalOpen: true,
+            bilingualLoading: false,
+            bilingualProgress: null,
+            bilingualError: null,
+            savedTranslations: {
+              ...cur.savedTranslations,
+              [slotKey]: cached,
+            },
+            statusMessage: '저장된 캐시에서 우리말 해석을 즉시 불러왔습니다.',
+          }));
+          return;
+        }
+      }
+
+      if (!hasActiveAiApiKey(st.openRouterConfig)) {
+        cancelActiveBilingualCall();
+        set({
+          bilingualModalOpen: true,
+          bilingualLoading: false,
+          bilingualProgress: null,
+          bilingualError:
+            'AI API 키가 설정되지 않았습니다. 우측 AI API 설정 버튼을 눌러 무료 Gemini API 키 또는 OpenRouter API 키를 입력한 뒤 다시 해석을 실행해 주세요.',
+        });
+        return;
+      }
+
+      cancelActiveBilingualCall();
+      const controller = new AbortController();
+      activeBilingualAbortController = controller;
+
+      set((cur) => {
+        const nextSaved = { ...cur.savedTranslations };
+        if (options?.forceRetranslate) {
+          delete nextSaved[slotKey];
+        }
+        return {
+          bilingualModalOpen: true,
+          bilingualLoading: true,
+          bilingualProgress: null,
+          bilingualError: null,
+          savedTranslations: nextSaved,
+        };
+      });
+
+      try {
+        const result = await translateEnglishPassage({
+          englishText: cleanEnglish,
+          customPrompt: st.translationPrompt,
+          config: st.openRouterConfig,
+          signal: controller.signal,
+          bypassCache: Boolean(options?.forceRetranslate),
+          onPartialUpdate: (partial, done, total) => {
+            if (controller.signal.aborted) return;
+            set((cur) => ({
+              bilingualProgress: { done, total },
+              savedTranslations: {
+                ...cur.savedTranslations,
+                [slotKey]: partial,
+              },
+            }));
+          },
+        });
+
+        if (controller.signal.aborted) return;
+
+        set((cur) => ({
+          bilingualLoading: false,
+          bilingualProgress: null,
+          bilingualError: null,
+          savedTranslations: {
+            ...cur.savedTranslations,
+            [slotKey]: result,
+          },
+          statusMessage: '우리말 해석 생성 및 지문 저장 완료',
+        }));
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        set({
+          bilingualLoading: false,
+          bilingualProgress: null,
+          bilingualError:
+            err instanceof Error
+              ? err.message
+              : '우리말 해석을 생성하는 중 오류가 발생했습니다.',
+        });
+      } finally {
+        if (activeBilingualAbortController === controller) {
+          activeBilingualAbortController = null;
+        }
+      }
+    },
+
+    closeBilingualModal: () => {
+      cancelActiveBilingualCall();
+      set({
+        bilingualModalOpen: false,
+        bilingualLoading: false,
+        bilingualProgress: null,
+      });
+    },
+
+    cancelBilingualRequest: () => {
+      cancelActiveBilingualCall();
+      set({ bilingualLoading: false, bilingualProgress: null });
+    },
+
+    updateTranslationPrompt: (nextPrompt) => {
+      const saved = saveTranslationPrompt(nextPrompt);
+      set({
+        translationPrompt: saved,
+        statusMessage: '우리말 해석 프롬프트를 저장했습니다.',
+      });
+    },
+
+    resetTranslationPrompt: () => {
+      const def = resetTranslationPromptToDefault();
+      set({
+        translationPrompt: def,
+        statusMessage: '우리말 해석 프롬프트를 기본 원칙으로 복원했습니다.',
+      });
+    },
+
+    saveEditedBilingualPairs: (pairs) => {
+      const st = get();
+      const ctx = resolveActivePassageContext(st);
+      const cleanEnglish = extractSavedTranslationFromPassage(
+        ctx.activePassage.content,
+      ).englishContent;
+      const slotKey = getPassageTranslationSlotKey(
+        ctx.activeFile?.id ?? null,
+        ctx.activePassageIndex,
+      );
+      const prev = st.savedTranslations[slotKey];
+      const normalizedPairs = pairs.map((p, idx) => ({
+        ...p,
+        index: idx,
+      }));
+      const koreanFullText = assembleKoreanFullTextFromPairs(normalizedPairs);
+      saveAlignmentCacheEntry(
+        cleanEnglish,
+        koreanFullText,
+        normalizedPairs.map((p) => p.ko),
+      );
+      const updated: SavedPassageTranslation = {
+        sourceEnglishText: cleanEnglish,
+        pairs: normalizedPairs,
+        koreanFullText,
+        updatedAt: Date.now(),
+        modelLabel: prev?.modelLabel ? `${prev.modelLabel} (수정됨)` : '직접 수정됨',
+      };
+      set((cur) => ({
+        savedTranslations: {
+          ...cur.savedTranslations,
+          [slotKey]: updated,
+        },
+        statusMessage: '수정한 우리말 해석을 현재 지문에 저장했습니다.',
+      }));
+    },
+
+    removeSavedTranslationForActivePassage: () => {
+      const st = get();
+      const ctx = resolveActivePassageContext(st);
+      const slotKey = getPassageTranslationSlotKey(
+        ctx.activeFile?.id ?? null,
+        ctx.activePassageIndex,
+      );
+      if (!(slotKey in st.savedTranslations)) return;
+      const next = { ...st.savedTranslations };
+      delete next[slotKey];
+      set({
+        savedTranslations: next,
+        statusMessage: '현재 지문에 저장된 우리말 해석을 삭제했습니다.',
+      });
+    },
+
+    buildActivePassageTxtContent: () => {
+      const st = get();
+      const ctx = resolveActivePassageContext(st);
+      const slotKey = getPassageTranslationSlotKey(
+        ctx.activeFile?.id ?? null,
+        ctx.activePassageIndex,
+      );
+      const cleanEnglish = extractSavedTranslationFromPassage(
+        ctx.activePassage.content,
+      ).englishContent;
+      const saved = st.savedTranslations[slotKey];
+      const hasTranslation = Boolean(
+        saved &&
+          saved.koreanFullText.trim() &&
+          saved.sourceEnglishText.trim() === cleanEnglish.trim(),
+      );
+      const text = hasTranslation
+        ? formatPassageWithSavedTranslation(cleanEnglish, saved!.koreanFullText)
+        : cleanEnglish;
+
+      const baseStem = ctx.activeFile
+        ? ctx.activeFile.name.replace(/\.[^.]+$/, '').trim() || 'passage'
+        : 'inline_passage';
+      const fileNameStem = ctx.isMultiPassage
+        ? `${baseStem}_p${ctx.activePassageIndex + 1}${hasTranslation ? '_bilingual' : ''}`
+        : `${baseStem}${hasTranslation ? '_bilingual' : '_profile'}`;
+
+      return { text, fileNameStem, hasTranslation };
+    },
+
+    buildFullPassageSetTxtContent: () => {
+      const st = get();
+      const ctx = resolveActivePassageContext(st);
+      const passages = parsePassageSet(ctx.fullDocumentText);
+      let translatedCount = 0;
+
+      const updatedPassages = passages.map((p) => {
+        const slotKey = getPassageTranslationSlotKey(
+          ctx.activeFile?.id ?? null,
+          p.index,
+        );
+        const cleanEnglish = extractSavedTranslationFromPassage(
+          p.content,
+        ).englishContent;
+        const saved = st.savedTranslations[slotKey];
+        if (
+          saved &&
+          saved.koreanFullText.trim() &&
+          saved.sourceEnglishText.trim() === cleanEnglish.trim()
+        ) {
+          translatedCount += 1;
+          return {
+            ...p,
+            content: formatPassageWithSavedTranslation(
+              cleanEnglish,
+              saved.koreanFullText,
+            ),
+          };
+        }
+        return p;
+      });
+
+      const text =
+        updatedPassages.length <= 1
+          ? updatedPassages[0]?.content ?? ''
+          : reconstructPassageSet(updatedPassages);
+
+      const baseStem = ctx.activeFile
+        ? ctx.activeFile.name.replace(/\.[^.]+$/, '').trim() || 'passage'
+        : 'inline_passage';
+
+      return {
+        text,
+        fileNameStem: `${baseStem}_set`,
+        translatedCount,
+      };
+    },
+
+    exportActivePassageTxt: () => {
+      const { text, fileNameStem, hasTranslation } =
+        get().buildActivePassageTxtContent();
+      if (!text.trim()) return;
+      exportRawTextAsTxt(text, fileNameStem);
+      set({
+        statusMessage: hasTranslation
+          ? '영어 본문과 우리말 해석을 함께 .txt 파일로 저장했습니다.'
+          : '영문 텍스트를 .txt 파일로 저장했습니다.',
+      });
+    },
+
+    exportFullPassageSetTxt: () => {
+      const { text, fileNameStem, translatedCount } =
+        get().buildFullPassageSetTxtContent();
+      if (!text.trim()) return;
+      exportRawTextAsTxt(text, fileNameStem);
+      set({
+        statusMessage:
+          translatedCount > 0
+            ? `세트 전체 .txt 파일을 저장했습니다 (우리말 해석 ${translatedCount}개 문항 포함).`
+            : '세트 전체 .txt 파일을 저장했습니다.',
+      });
     },
   };
 });

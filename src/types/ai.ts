@@ -253,3 +253,27 @@ export interface CombinedSuggestionResult {
   repaired: boolean;
 }
 
+export interface BilingualSentencePair {
+  /** 0-based sentence unit index */
+  index: number;
+  /** English sentence unit */
+  en: string;
+  /** Corresponding Korean translation (1 sentence, or 2 sentences when split for naturalness) */
+  ko: string;
+  /** 0-based paragraph index so paragraph breaks match between left and right panes */
+  paragraphIndex: number;
+}
+
+export interface SavedPassageTranslation {
+  /** Clean English passage text at the time the translation was saved */
+  sourceEnglishText: string;
+  /** 1:1 aligned English-Korean sentence pairs */
+  pairs: BilingualSentencePair[];
+  /** Paragraph-formatted Korean full text saved under [우리말 해석] in .txt files */
+  koreanFullText: string;
+  /** Epoch ms when saved/updated */
+  updatedAt: number;
+  /** Provider/model label or '파일에서 불러옴' */
+  modelLabel?: string;
+}
+

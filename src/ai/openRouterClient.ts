@@ -19,7 +19,7 @@ const OPENROUTER_CHAT_ENDPOINT =
   'https://openrouter.ai/api/v1/chat/completions';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const GEMINI_OVERLOAD_COOLDOWN_MS = 60_000;
-const GEMINI_ATTEMPT_TIMEOUT_MS = 7_500;
+const GEMINI_ATTEMPT_TIMEOUT_MS = 5_500;
 
 const fastParamsUnsupportedModels = new Set<string>();
 const geminiNoFastThinkingModels = new Set<string>();
@@ -505,8 +505,8 @@ async function sendChatCompletionRequest(params: {
 
   if (useFastParams) {
     body.response_format = { type: 'json_object' };
-    body.reasoning = { effort: 'low', exclude: true };
-    body.provider = { sort: 'throughput', allow_fallbacks: true };
+    body.reasoning = { effort: 'minimal', exclude: true };
+    body.provider = { sort: 'latency', allow_fallbacks: true };
   }
 
   const res = await fetch(OPENROUTER_CHAT_ENDPOINT, {
@@ -910,6 +910,7 @@ async function runGeminiWithOverloadFailover(params: {
   messages: ChatMessage[];
   temperature?: number;
   maxTokens: number;
+  attemptTimeoutMs?: number;
   signal?: AbortSignal;
 }): Promise<{
   content: string;
@@ -943,7 +944,7 @@ async function runGeminiWithOverloadFailover(params: {
 
       const timeoutGuard = withAttemptTimeout(
         params.signal,
-        GEMINI_ATTEMPT_TIMEOUT_MS,
+        params.attemptTimeoutMs ?? GEMINI_ATTEMPT_TIMEOUT_MS,
       );
       try {
         return await executeSingleGeminiModelAttempt({
@@ -1021,6 +1022,7 @@ async function requestGeminiWithCompatibilityFallback(params: {
   messages: ChatMessage[];
   temperature?: number;
   maxTokens: number;
+  attemptTimeoutMs?: number;
   signal?: AbortSignal;
 }): Promise<{ content: string; finishReason: string | null }> {
   const res = await runGeminiWithOverloadFailover(params);
@@ -1081,6 +1083,7 @@ export async function callOpenRouterJson<T>(params: {
   messages: ChatMessage[];
   temperature?: number;
   maxTokens?: number;
+  attemptTimeoutMs?: number;
   signal?: AbortSignal;
 }): Promise<T> {
   const provider = getActiveAiProvider(params.config);
@@ -1104,6 +1107,7 @@ export async function callOpenRouterJson<T>(params: {
     messages: params.messages,
     temperature: params.temperature,
     maxTokens: baseMaxTokens,
+    attemptTimeoutMs: params.attemptTimeoutMs,
     signal: params.signal,
   });
 
@@ -1128,6 +1132,7 @@ export async function callOpenRouterJson<T>(params: {
       messages: retryMessages,
       temperature: 0.1,
       maxTokens: Math.max(baseMaxTokens, 3200),
+      attemptTimeoutMs: params.attemptTimeoutMs,
       signal: params.signal,
     });
 
