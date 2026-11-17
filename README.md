@@ -23,9 +23,9 @@
 - **복수 문항 세트 `.txt` 관리**: 하나의 `.txt` 파일(또는 인라인 텍스트) 내 여러 문항을 구분선(`---`, `===`), 문항 번호 헤더(`[18]`, `#1`, `문항 1`, `18.` 등), 또는 빈 줄 2줄 이상으로 자동 감지·무손실 분리하고 **`◀ 이전 문항 / 다음 문항 ▶`**(`Alt + ←` / `Alt + →`) 버튼과 드롭다운으로 지문 간 이동·개별 편집 지원
 - **실시간 Word Count & 무손실 토큰화**: 상단 파일 요약 바에 MS Word 공백 기준 전체 단어 수(`Word Count`) 배지를 실시간 표시하며, `leadingWs` / `trailingWs` 원문 공백·개행을 100% 보존
 - 실시간 색상 하이라이트 (`List Words` 레벨별 색상 보기 ↔ `Non-List Words` 미등재 어휘 집중 보기 전환)
-- 깔끔한 `Inline Text` 직접 전환 버튼 + `Open` 툴바 구성, `Profiled` / `Edit Text` 세그먼트 전환, 인라인·파일별 Undo/Redo 히스토리, 정규식·단어 검색(`Ctrl+F`, `Enter` / `Shift+Enter`), 본문 글꼴 크기 조절(`14px ~ 32px`, 기본 `18px`)
-- **Selection Inspector & 서식 포함 복사 (`전체 복사` / `선택 복사`)**: 단어 클릭 시 출현 빈도·비율·레벨·대표어(`Headword`) 즉시 조회 및 **선택된 단어 재클릭 시 선택 해제**, 본문 우클릭 예외 어휘 등록, 문장 붙여넣기 시 기존 레벨 리스트에 없는 미등재 단어만 자동 추출, 그리고 강조 어휘의 **글자색(`#RRGGBB`) + 굵기(`Bold`) 서식을 보존**해 Word·한글(HWP)에 바로 붙여넣기 가능한 멀티 포맷 클립보드 복사 지원
-- 상단 `File` 메뉴를 통한 레벨 색상 보존 Word(`.docx`), 단독 실행 `.html`, 순수 텍스트(`.txt` / 세트 전체 `.txt`) 내보내기
+- 깔끔한 `Inline Text` 직접 전환 버튼 + `Open` 툴바 구성, `Profiled` / `Edit Text` 세그먼트 전환, 인라인·파일별 Undo/Redo 히스토리, 본문 글꼴 크기 조절(`14px ~ 32px`, 기본 `18px`), **`영어/우리말` AI 대조 해석 창 버튼**(해석 저장 상태 표시 포함), 정규식·단어 검색(`Ctrl+F`, `Enter` / `Shift+Enter`)
+- **컴팩트 Selection Inspector & 서식 포함 복사 (`전체 복사` / `선택 복사`)**: 우측 상단 2열 요약 그리드(`.inspector-kv-grid`)와 헤더 인라인 `+ Add to Ignore` 배치로 하단 결과 표시 공간을 극대화하며, 단어 클릭 시 출현 빈도·비율·레벨·대표어(`Headword`) 즉시 조회 및 **선택된 단어 재클릭 시 선택 해제**, 본문 우클릭 예외 어휘 등록, 문장 붙여넣기 시 미등재 단어 자동 추출, 강조 어휘의 **글자색(`#RRGGBB`) + 굵기(`Bold`) 서식 보존** 멀티 포맷 클립보드 복사 지원
+- 상단 `File` 메뉴를 통한 레벨 색상 보존 Word(`.docx`), 단독 실행 `.html`, 순수 텍스트(`.txt` / 세트 전체 `.txt` — 저장된 `[우리말 해석]` 블록 자동 포함 및 재열기 복원) 내보내기
 
 ### 3. Statistics Viewer (6종 코퍼스 통계 & 가상 테이블)
 - 원본 `AntWordProfiler 2.2.1` 스키마와 호환되는 6개 통계 시트 생성:
@@ -41,8 +41,9 @@
 ### 5. Google Gemini (무료 지원) · OpenRouter 기반 AI 어휘 도우미 (`src/ai/`)
 - **이중 API 제공자 및 브라우저 직접 호출**: 백엔드 서버·DB 없이 무료 티어를 제공하는 **Google Gemini API (`Google AI Studio`)** 또는 **OpenRouter API**를 선택해 브라우저에서 직접 호출하며, 두 API 키를 독립적으로 보관·삭제할 수 있습니다. 모든 추천 후보와 패러프레이즈 토큰은 로컬 `lexiconVerifier`로 활성 단어장 등재 여부를 결정론적으로 대조 검증합니다.
 - **통합 4종 AI 어휘 추천 모달 (`AiSuggestionModal` · 단어 3+3 & 문장 3+3) & 형광 강조**: 단일 API 호출로 **Word List 내 추천 단어 3개 · 리스트 외 허용 대체 단어 3개 · Word List 내 패러프레이즈 3개 · 리스트 외 포함 패러프레이즈 3개**를 동시에 생성해 상단 트랙 필터(`전체 보기` / `Word List 내` / `Word List 외 확장`)와 CSS Grid `subgrid` 좌·우 오와 열 정렬로 표시하며, 원문 문장의 선택 어휘와 카드 미리보기의 치환 어휘에 **노란색 형광펜 배경(`.ai-highlight-mark`)**을 칠해 직관적으로 식별할 수 있습니다. 로딩 중에는 회전 스피너·초록 맥박·`0.1초` 타이머·왕복 진행 바·쉬머 스켈레톤을 제공하고, 대형 창(`min(1620px, 94vw)`) 헤더 포인터 드래그 이동을 지원합니다.
-- **혼잡 자동 우회 & 고속 추론**: Gemini `GET /v1beta/models/<id>` 즉시 연결 확인, `HTTP 503` 요청 폭주 및 `7.5초` 응답 지연 시 경량 백업 무료 모델(`gemini-3.5-flash-lite` 등) 즉시 자동 페일오버(60초 쿨다운 기억), Gemini 세대별 추론 최적화(Gemini 3/4 `thinkingLevel: "LOW"`, Gemini 2.5 `thinkingBudget: 0`), OpenRouter `provider.sort: "throughput"` + `reasoning: { effort: "low", exclude: true }`, 다단계 JSON 복구 파서(`extractJsonObjectFromText`) 및 32건 세션 캐시를 지원합니다.
-- **어근·기본형 형태소 대조 (`analyzeMorphologyAndRoots`)**: 선택 단어의 문맥 품사 및 기본형·파생 기반어·어근의 활성 단어장 등재 여부를 즉시 대조합니다.
+- **`영어/우리말` 한·영 문장 양방향 연동 대조 모달 (`BilingualTranslationModal`)**: 에디터 툴바의 `영어/우리말` 클릭 시 대형 창에서 좌측 영어 원문·우측 AI 우리말 해석을 나란히 표시하며, 영어 문장을 클릭하면 대응하는 우리말 문장이, 우리말 문장을 클릭하면 대응하는 영어 문장이 양방향 하이라이트·자동 스크롤됩니다(`줄글 보기` / `문장별 정렬` 전환, 우리말 직접 수정, 수정 가능한 `우리말 해석 원칙` 프롬프트 내장, `[우리말 해석]` 블록 `.txt` 함께 저장 및 재로드 시 영어 어휘 통계 무오염 자동 분리 지원).
+- **혼잡 자동 우회 & 초저지연 병렬 추론**: Gemini `GET /v1beta/models/<id>` 즉시 연결 확인, `HTTP 503` 요청 폭주 및 `5.5초` 응답 지연 시 경량 백업 무료 모델(`gemini-3.5-flash-lite` 등) 즉시 자동 페일오버(60초 쿨다운 기억), Gemini 세대별 추론 최적화(Gemini 3/4 `thinkingLevel: "LOW"`, Gemini 2.5 `thinkingBudget: 0`), OpenRouter `provider.sort: "latency"` + `reasoning: { effort: "minimal", exclude: true }`, 지문 해석 최대 4배치 병렬 호출(`{ "t": [...] }` 경량 스키마 + 완료 배치 즉시 점진 렌더링 `onPartialUpdate`) 및 `localStorage` 영속 캐시를 지원합니다.
+- **어근·기본형 형태소 병렬 대조 (`analyzeMorphologyAndRoots`)**: 로컬 `Master Family` 파생어군 로드와 AI 형태소 호출을 병렬 실행해 선택 단어의 문맥 품사 및 기본형·파생 기반어·어근의 활성 단어장 등재 여부를 빠르게 대조합니다.
 
 ---
 
@@ -194,3 +195,22 @@ npm run exe:build
 - **검증 결과**:
   - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
   - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 10개 테스트 파일 / 63개 테스트 전원 통과 — `src/io/fileReaders.test.ts` live `FileList` 보존 및 UTF-8/UTF-16 BOM `.txt` 파싱 테스트 5건 신규 추가).
+
+## [2026-11-18 01:06] 업데이트 이력 (Commit ID: `08807d4`)
+- **수정 내용**:
+  - **`'영어/우리말'` 한·영 양방향 문장 연동 AI 해석 모달 및 `.txt` 통합 저장 구현**:
+    - `EditorToolbar.tsx`에 `'영어/우리말'` 버튼(저장된 해석 존재 시 상태 점 표시)을 추가하고, 좌측 영어·우측 우리말 대형 대조 창(`BilingualTranslationModal.tsx`, 헤더 드래그 이동·이전/다음 문항 전환·`줄글 보기`/`문장별 정렬`·우리말 직접 편집·복사 지원)을 구현.
+    - 영어 문장 분리 및 한·영 문장 정렬기(`sentenceSegmenter.ts`)를 통해 영어 문장 선택 시 해당 우리말 문장, 우리말 문장 선택 시 해당 영어 문장이 양방향 동기화 하이라이트되도록 구성하고, 사용자 지정 16개 항목 `우리말 해석 원칙` 기본 프롬프트를 모달 내에서 자유롭게 편집·저장·초기화(`passageTranslationService.ts`)할 수 있도록 지원.
+    - 해석이 저장된 지문은 현재 지문 `.txt` 및 세트 전체 `.txt` 저장 시 `[우리말 해석]` 섹션이 함께 기록되며, 해당 `.txt`를 다시 열면 우리말 해석은 대조 창 슬롯으로 자동 복원되고 영어 본문 프로파일링·단어 수·통계에는 섞이지 않도록 분리(`passageSetParser.ts`, `useProfilerStore.ts`, `TopMenuBar.tsx`).
+  - **우측 `Selection Inspector` 및 `AI 어휘 도우미` 상단 컴팩트 레이아웃 개선**:
+    - `SelectionInspector.tsx`, `AiLexicalPanel.tsx`, `workspace.css`에서 `Selection`·`Count`·`Level`·`Headword`를 2열 그리드(`.inspector-kv-grid`)로 압축하고 `+ Add to Ignore` 버튼을 섹션 헤더 우측으로 통합했으며, 활성 AI 바·검증 기준 배너·버튼 여백을 축소(`13px` 최소 글꼴 바닥선 및 `tabular-nums` 유지)하여 패널 하단 결과 표시 공간을 대폭 확보.
+  - **AI API(지문 해석 · 어휘 추천 · 형태소 분석) 응답 속도 단축 최적화**:
+    - `openRouterClient.ts`에서 OpenRouter 라우팅을 `provider.sort: 'latency'` 및 `reasoning: { effort: 'minimal', exclude: true }`로 전환하고 Gemini 과부하 타임아웃 기준을 `7.5초 → 5.5초`(`attemptTimeoutMs` 지원)로 단축.
+    - `passageTranslationService.ts`에서 긴 지문을 문맥 힌트 포함 다중 배치(최대 4개 동시 호출)로 병렬 요청하고 `{ "t": [...] }` 경량 JSON 스키마(영어 원문 에코 제거), 완료 배치 즉시 화면 표시(`onPartialUpdate`), `localStorage` 영속 캐시(`antwordprofiler_translation_result_cache_v1`)를 적용.
+    - `lexicalAssistantService.ts`에서 `AI 추천` 프롬프트를 축약하고 `analyzeMorphologyAndRoots`의 `Master Family` 로드와 LLM 호출을 `Promise.all` 병렬화.
+  - **Windows 독립 실행형 `.exe` 최신화 재빌드**:
+    - 위 변경 사항 전체를 프로덕션 번들(`dist/`) 및 Windows 실행 파일(`release/AntWordProfiler-Portable.exe`, `release/win-unpacked/AntWordProfiler.exe`)에 반영하여 재패키징 완료.
+- **검증 결과**:
+  - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
+  - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 12개 테스트 파일 / 73개 테스트 전원 통과 — `sentenceSegmenter.test.ts` 6건, `passageTranslationService.test.ts` 병렬 배치·부분 렌더링·캐시 포함 3건, `useProfilerStore.test.ts` `[우리말 해석]` `.txt` 왕복 복원·통계 분리 테스트 포함).
+  - Windows `.exe` 재빌드 검증 통과: `npm run exe:build` (`tsc -b && vite build && electron-builder --win portable`, Exit Code 0 — `release/AntWordProfiler-Portable.exe` 및 `release/win-unpacked/AntWordProfiler.exe` 최신 생성 확인).
