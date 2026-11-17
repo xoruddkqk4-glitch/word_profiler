@@ -8,7 +8,10 @@ import {
   Wand2,
 } from 'lucide-react';
 import { resolveTokenHighlight } from '../../core/colorPalette';
-import { copyTextSafe } from '../../io/docExporters';
+import {
+  buildRichProfileClipboardPayload,
+  copyRichTextSafe,
+} from '../../io/docExporters';
 import { useProfilerStore } from '../../store/useProfilerStore';
 import { hasActiveAiApiKey } from '../../types/ai';
 import type { ProfileToken } from '../../types/domain';
@@ -26,6 +29,7 @@ export const HighlightedTextView: React.FC = () => {
   const profile = store.activeProfile;
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const handledByMouseUpRef = useRef(false);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
 
   const refMap = useMemo(
@@ -98,10 +102,14 @@ export const HighlightedTextView: React.FC = () => {
     }
 
     if (maxIdx >= minIdx && minIdx !== Infinity) {
+      handledByMouseUpRef.current = true;
       if (maxIdx > minIdx) {
         store.selectTokenRange(minIdx, maxIdx);
       } else {
-        store.selectTokenInstance(minIdx);
+        store.selectTokenInstance(minIdx, { toggleIfSelected: true });
+        if (!useProfilerStore.getState().selectedTokenSpan) {
+          selection.removeAllRanges();
+        }
       }
     }
   };
@@ -121,14 +129,40 @@ export const HighlightedTextView: React.FC = () => {
   };
 
   const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (handledByMouseUpRef.current) {
+      handledByMouseUpRef.current = false;
+      return;
+    }
     const selection = window.getSelection();
     if (selection && !selection.isCollapsed) {
       return;
     }
     const idx = findTokenIndexFromTarget(e.target);
     if (idx !== null) {
-      store.selectTokenInstance(idx);
+      store.selectTokenInstance(idx, { toggleIfSelected: true });
+      if (!useProfilerStore.getState().selectedTokenSpan) {
+        selection?.removeAllRanges();
+      }
     }
+  };
+
+  const handleContainerCopy = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    if (!span) return;
+    const payload = buildRichProfileClipboardPayload(
+      profile,
+      store.referenceLists,
+      {
+        showLevels: store.settings.showLevels,
+        ignoreEnabled: store.ignoreEnabled,
+        ignoreColor: store.ignoreColor,
+        outColor: store.outColor,
+        plainFormatView: store.plainFormatView,
+      },
+      { startTokenIdx: span.startTokenIdx, endTokenIdx: span.endTokenIdx },
+    );
+    e.clipboardData.setData('text/plain', payload.plainText);
+    e.clipboardData.setData('text/html', payload.htmlText);
+    e.preventDefault();
   };
 
   const handleContainerContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -138,9 +172,9 @@ export const HighlightedTextView: React.FC = () => {
     const tok = profile.tokens[idx];
     const inMultiPhrase = Boolean(
       span &&
-        span.endTokenIdx > span.startTokenIdx &&
-        idx >= span.startTokenIdx &&
-        idx <= span.endTokenIdx,
+      span.endTokenIdx > span.startTokenIdx &&
+      idx >= span.startTokenIdx &&
+      idx <= span.endTokenIdx,
     );
     if (!inMultiPhrase) {
       store.selectTokenInstance(idx);
@@ -161,6 +195,7 @@ export const HighlightedTextView: React.FC = () => {
       style={{ fontSize: `${store.settings.fontSizePx}px` }}
       onMouseUp={handleMouseUpSelection}
       onClick={handleContainerClick}
+      onCopy={handleContainerCopy}
       onContextMenu={handleContainerContextMenu}
     >
       <div className="profiled-prose-measure">
@@ -169,12 +204,12 @@ export const HighlightedTextView: React.FC = () => {
           const hl = store.plainFormatView
             ? { color: null, isHighlighted: false }
             : resolveTokenHighlight(tok, refMap, {
-                showLevels: store.settings.showLevels,
-                ignoreEnabled: store.ignoreEnabled,
-                ignoreColor: store.ignoreColor,
-                outColor: store.outColor,
-                theme: store.theme,
-              });
+              showLevels: store.settings.showLevels,
+              ignoreEnabled: store.ignoreEnabled,
+              ignoreColor: store.ignoreColor,
+              outColor: store.outColor,
+              theme: store.theme,
+            });
 
           const isInSpan = Boolean(
             span && i >= span.startTokenIdx && i <= span.endTokenIdx,
@@ -329,9 +364,30 @@ export const HighlightedTextView: React.FC = () => {
               type="button"
               className="menu-item"
               onClick={() => {
-                const textToCopy = ctxMenu.phraseText ?? ctxMenu.token.token;
+                const range =
+                  ctxMenu.phraseText && span
+                    ? {
+                      startTokenIdx: span.startTokenIdx,
+                      endTokenIdx: span.endTokenIdx,
+                    }
+                    : {
+                      startTokenIdx: ctxMenu.tokenIdx,
+                      endTokenIdx: ctxMenu.tokenIdx,
+                    };
                 setCtxMenu(null);
-                void copyTextSafe(textToCopy);
+                const payload = buildRichProfileClipboardPayload(
+                  profile,
+                  store.referenceLists,
+                  {
+                    showLevels: store.settings.showLevels,
+                    ignoreEnabled: store.ignoreEnabled,
+                    ignoreColor: store.ignoreColor,
+                    outColor: store.outColor,
+                    plainFormatView: store.plainFormatView,
+                  },
+                  range,
+                );
+                void copyRichTextSafe(payload.plainText, payload.htmlText);
               }}
             >
               <span className="menu-item-left">

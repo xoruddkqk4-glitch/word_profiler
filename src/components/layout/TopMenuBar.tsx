@@ -21,10 +21,13 @@ import {
 } from 'lucide-react';
 import { isManifestEntryLoaded } from '../../core/wordlistParser';
 import {
+  buildRichProfileClipboardPayload,
+  copyRichTextSafe,
   copyTextSafe,
   exportProfileAsDocx,
   exportProfileAsHtml,
   exportProfileAsTxt,
+  exportRawTextAsTxt,
 } from '../../io/docExporters';
 import {
   decodeTextBufferSmart,
@@ -44,7 +47,10 @@ import {
   exportAllStatsAsXlsx,
   exportSingleStatTabAsTsv,
 } from '../../io/statsExporters';
-import { useProfilerStore } from '../../store/useProfilerStore';
+import {
+  resolveActivePassageContext,
+  useProfilerStore,
+} from '../../store/useProfilerStore';
 import { profilerWorkerClient } from '../../workers/workerClient';
 
 type MenuKey = 'file' | 'edit' | 'lists' | 'settings' | 'help' | null;
@@ -151,6 +157,28 @@ export const TopMenuBar: React.FC = () => {
   const handleCopyActiveContent = async () => {
     setOpenMenu(null);
     if (store.activeMainTab === 'profiler') {
+      if (store.activeProfile && store.editorMode === 'profiled') {
+        const range = store.selectedTokenSpan
+          ? {
+            startTokenIdx: store.selectedTokenSpan.startTokenIdx,
+            endTokenIdx: store.selectedTokenSpan.endTokenIdx,
+          }
+          : undefined;
+        const payload = buildRichProfileClipboardPayload(
+          store.activeProfile,
+          store.referenceLists,
+          {
+            showLevels: store.settings.showLevels,
+            ignoreEnabled: store.ignoreEnabled,
+            ignoreColor: store.ignoreColor,
+            outColor: store.outColor,
+            plainFormatView: store.plainFormatView,
+          },
+          range,
+        );
+        await copyRichTextSafe(payload.plainText, payload.htmlText);
+        return;
+      }
       const txt =
         store.activeProfile?.originalText ?? store.inlineText;
       if (txt) {
@@ -165,6 +193,14 @@ export const TopMenuBar: React.FC = () => {
       await copySheetToClipboard(sheet);
     }
   };
+
+  const passageCtx = resolveActivePassageContext({
+    activeTargetFileId: store.activeTargetFileId,
+    targetFiles: store.targetFiles,
+    filePassageIndices: store.filePassageIndices,
+    inlineText: store.inlineText,
+    inlinePassageIndex: store.inlinePassageIndex,
+  });
 
   return (
     <header className="top-menubar" ref={menuBarRef}>
@@ -428,6 +464,39 @@ export const TopMenuBar: React.FC = () => {
                 >
                   <span className="menu-item-left">Close All Target Files</span>
                 </button>
+                {store.targetFiles.length > 0 && (
+                  <>
+                    <div className="menu-divider" />
+                    <div className="menu-section-caption">
+                      Opened Target Files
+                    </div>
+                    {store.targetFiles.map((file) => {
+                      const isActive = store.activeTargetFileId === file.id;
+                      return (
+                        <button
+                          key={file.id}
+                          type="button"
+                          className="menu-item"
+                          onClick={() => {
+                            setOpenMenu(null);
+                            void store.openTargetFileInProfiler(file.id);
+                          }}
+                        >
+                          <span className="menu-item-left">
+                            {isActive ? (
+                              <Check size={14} />
+                            ) : (
+                              <span
+                                style={{ width: 14, display: 'inline-block' }}
+                              />
+                            )}
+                            <FileText size={14} /> {file.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </>
+                )}
 
                 <div className="menu-divider" />
                 <div className="menu-section-caption">Save Active Profile</div>
@@ -489,9 +558,33 @@ export const TopMenuBar: React.FC = () => {
                   }}
                 >
                   <span className="menu-item-left">
-                    <Download size={14} /> Save Plain Text (.txt)
+                    <Download size={14} />{' '}
+                    {passageCtx.isMultiPassage
+                      ? 'Save Current Passage (.txt)'
+                      : 'Save Plain Text (.txt)'}
                   </span>
                 </button>
+                {passageCtx.isMultiPassage && (
+                  <button
+                    type="button"
+                    className="menu-item"
+                    onClick={() => {
+                      setOpenMenu(null);
+                      const stem = passageCtx.activeFile
+                        ? passageCtx.activeFile.name.replace(/\.[^.]+$/, '')
+                        : 'inline_passage_set';
+                      exportRawTextAsTxt(
+                        passageCtx.fullDocumentText,
+                        `${stem}_set`,
+                      );
+                    }}
+                  >
+                    <span className="menu-item-left">
+                      <Download size={14} /> Save Full Passage Set (
+                      {passageCtx.passages.length} items, .txt)
+                    </span>
+                  </button>
+                )}
 
                 <div className="menu-divider" />
                 <div className="menu-section-caption">Export Statistics</div>
@@ -520,7 +613,7 @@ export const TopMenuBar: React.FC = () => {
                   onClick={() => {
                     setOpenMenu(null);
                     if (!store.statsBundle) return;
-                    exportAllStatsAsXlsx(
+                    void exportAllStatsAsXlsx(
                       store.statsBundle,
                       store.settings.showFullPathsInStats,
                     );

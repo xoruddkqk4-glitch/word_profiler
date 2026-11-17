@@ -1,4 +1,3 @@
-import JSZip from 'jszip';
 import type { ExportedLevelGroup } from '../types/workerMessages';
 import { triggerBrowserDownload } from './docExporters';
 
@@ -38,7 +37,11 @@ export async function exportLevelGroupsArchive(
     return;
   }
 
-  const zip = new JSZip();
+  const jszipMod = (await import('jszip')) as unknown as {
+    default?: typeof import('jszip');
+  } & typeof import('jszip');
+  const JSZipCtor = jszipMod.default ?? jszipMod;
+  const zip = new JSZipCtor();
   groups.forEach((group, idx) => {
     const safeName = group.listName.replace(/[\\/:*?"<>|]+/g, '_');
     const filename = `${idx + 1}_${safeName}.txt`;

@@ -98,6 +98,26 @@ export function tokenizeLossless(
   return { leadingWs, pieces };
 }
 
+const WORD_CHAR_RE = /[\p{L}\p{N}]/u;
+
+/**
+ * Counts words using MS Word / exam passage style whitespace splitting:
+ * hyphenated words ("ninety-five"), contractions ("don't"), and numbers ("95%", "2026")
+ * count as 1 word each, while standalone punctuation tokens ("—", "*", "...") are excluded.
+ */
+export function countWordsMsWordStyle(text: string): number {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  const chunks = trimmed.split(/\s+/u);
+  let count = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    if (WORD_CHAR_RE.test(chunks[i])) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 /**
  * Extracts unique normalized word tokens from arbitrary pasted text
  * (used by Extra Ignore Words smart paste).

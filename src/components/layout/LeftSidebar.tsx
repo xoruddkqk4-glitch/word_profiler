@@ -213,15 +213,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ widthPx }) => {
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              className="btn btn-sm"
-              disabled={store.referenceLists.every((r) => r.enabled)}
-              title="체크 해제된 레퍼런스 리스트 닫기"
-              onClick={() => void store.closeDeactivatedReferenceLists()}
-            >
-              Clear
-            </button>
           </div>
         </div>
 

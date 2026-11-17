@@ -1,4 +1,3 @@
-import { Document, Packer, Paragraph, TextRun } from 'docx';
 import {
   resolveTokenHighlight,
   type LevelColorPair,
@@ -61,12 +60,225 @@ export function exportProfileAsTxt(profile: DocumentProfileResult): void {
   triggerBrowserDownload(blob, `${sanitizeStem(profile.sourceName)}_profile.txt`);
 }
 
+export function exportRawTextAsTxt(content: string, fileName: string): void {
+  const blob = new Blob([content], {
+    type: 'text/plain;charset=utf-8',
+  });
+  triggerBrowserDownload(blob, `${sanitizeStem(fileName)}.txt`);
+}
+
 function escapeHtml(raw: string): string {
   return raw
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function escapeHtmlPreservingSpaces(raw: string): string {
+  return escapeHtml(raw)
+    .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
+    .replace(/ {2,}/g, (spaces) => ` ${'&nbsp;'.repeat(spaces.length - 1)}`);
+}
+
+export interface RichCopyFormattingOptions {
+  showLevels: boolean;
+  ignoreEnabled: boolean;
+  ignoreColor: LevelColorPair;
+  outColor: LevelColorPair;
+  plainFormatView?: boolean;
+}
+
+export interface RichClipboardPayload {
+  plainText: string;
+  htmlText: string;
+}
+
+const CLIPBOARD_BASE_FONT =
+  "Calibri,'Malgun Gothic','Apple SD Gothic Neo',sans-serif";
+
+export function buildRichProfileClipboardPayload(
+  profile: DocumentProfileResult,
+  referenceLists: ReferenceListSource[],
+  options: RichCopyFormattingOptions,
+  tokenRange?: { startTokenIdx: number; endTokenIdx: number },
+): RichClipboardPayload {
+  if (profile.tokens.length === 0) {
+    const plain = tokenRange ? '' : profile.originalText;
+    return {
+      plainText: plain,
+      htmlText: `<span style="font-family:${CLIPBOARD_BASE_FONT};font-size:11pt;color:#0f172a;">${escapeHtmlPreservingSpaces(plain)}</span>`,
+    };
+  }
+
+  const refMap = new Map(referenceLists.map((r) => [r.id, r]));
+  const isFullDocument = !tokenRange;
+  const lo = tokenRange
+    ? Math.max(
+        0,
+        Math.min(
+          tokenRange.startTokenIdx,
+          tokenRange.endTokenIdx,
+          profile.tokens.length - 1,
+        ),
+      )
+    : 0;
+  const hi = tokenRange
+    ? Math.max(
+        lo,
+        Math.min(
+          Math.max(tokenRange.startTokenIdx, tokenRange.endTokenIdx),
+          profile.tokens.length - 1,
+        ),
+      )
+    : profile.tokens.length - 1;
+
+  let plainText = '';
+  const htmlLineChunks: string[][] = [[]];
+
+  const appendSegment = (
+    raw: string,
+    hexColor: string | null,
+    bold: boolean,
+  ) => {
+    if (!raw) return;
+    plainText += raw;
+    const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const parts = normalized.split('\n');
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (part.length > 0) {
+        const escaped = escapeHtmlPreservingSpaces(part);
+        if (hexColor && bold) {
+          htmlLineChunks[htmlLineChunks.length - 1].push(
+            `<span style="color:${escapeHtml(hexColor)};font-weight:700;"><b>${escaped}</b></span>`,
+          );
+        } else if (hexColor) {
+          htmlLineChunks[htmlLineChunks.length - 1].push(
+            `<span style="color:${escapeHtml(hexColor)};">${escaped}</span>`,
+          );
+        } else if (bold) {
+          htmlLineChunks[htmlLineChunks.length - 1].push(
+            `<span style="font-weight:700;"><b>${escaped}</b></span>`,
+          );
+        } else {
+          htmlLineChunks[htmlLineChunks.length - 1].push(escaped);
+        }
+      }
+      if (i < parts.length - 1) {
+        htmlLineChunks.push([]);
+      }
+    }
+  };
+
+  if (isFullDocument && profile.leadingWs) {
+    appendSegment(profile.leadingWs, null, false);
+  }
+
+  for (let i = lo; i <= hi; i++) {
+    const tok = profile.tokens[i];
+    const hl = options.plainFormatView
+      ? { color: null, isHighlighted: false }
+      : resolveTokenHighlight(tok, refMap, {
+          showLevels: options.showLevels,
+          ignoreEnabled: options.ignoreEnabled,
+          ignoreColor: options.ignoreColor,
+          outColor: options.outColor,
+          theme: 'light',
+        });
+
+    // Highlighted words carry explicit #RRGGBB color + Bold (<b> + font-weight:700)
+    // so MS Word, HWP (한글), Google Docs, and Notion preserve both color and weight.
+    appendSegment(tok.token, hl.color, Boolean(hl.color));
+
+    if (isFullDocument || i < hi) {
+      appendSegment(tok.trailingWs, null, false);
+    }
+  }
+
+  if (htmlLineChunks.length <= 1) {
+    const inlineInner = (htmlLineChunks[0] ?? []).join('');
+    return {
+      plainText,
+      htmlText: `<span style="font-family:${CLIPBOARD_BASE_FONT};font-size:11pt;color:#0f172a;font-weight:400;">${inlineInner}</span>`,
+    };
+  }
+
+  const paragraphs = htmlLineChunks
+    .map((chunks) => {
+      const inner = chunks.join('');
+      return `<p style="margin:0;font-family:${CLIPBOARD_BASE_FONT};font-size:11pt;color:#0f172a;font-weight:400;line-height:1.6;">${inner || '&nbsp;'}</p>`;
+    })
+    .join('');
+
+  return {
+    plainText,
+    htmlText: `<div style="font-family:${CLIPBOARD_BASE_FONT};font-size:11pt;color:#0f172a;line-height:1.6;">${paragraphs}</div>`,
+  };
+}
+
+export async function copyRichTextSafe(
+  plainText: string,
+  htmlText: string,
+): Promise<boolean> {
+  if (!plainText) return false;
+
+  try {
+    if (
+      typeof navigator !== 'undefined' &&
+      navigator.clipboard?.write &&
+      typeof ClipboardItem !== 'undefined'
+    ) {
+      const item = new ClipboardItem({
+        'text/html': new Blob([htmlText], { type: 'text/html' }),
+        'text/plain': new Blob([plainText], { type: 'text/plain' }),
+      });
+      await navigator.clipboard.write([item]);
+      return true;
+    }
+  } catch {
+    // Fall through to offscreen contenteditable execCommand('copy')
+  }
+
+  try {
+    if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+      const sel = window.getSelection();
+      const savedRanges: Range[] = [];
+      if (sel) {
+        for (let i = 0; i < sel.rangeCount; i++) {
+          savedRanges.push(sel.getRangeAt(i).cloneRange());
+        }
+      }
+
+      const holder = document.createElement('div');
+      holder.contentEditable = 'true';
+      holder.innerHTML = htmlText;
+      holder.style.position = 'fixed';
+      holder.style.left = '-9999px';
+      holder.style.top = '0';
+      holder.style.opacity = '0';
+      holder.style.pointerEvents = 'none';
+      document.body.appendChild(holder);
+
+      const range = document.createRange();
+      range.selectNodeContents(holder);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+
+      const ok = document.execCommand('copy');
+      sel?.removeAllRanges();
+      for (const r of savedRanges) {
+        sel?.addRange(r);
+      }
+      document.body.removeChild(holder);
+      if (ok) return true;
+    }
+  } catch {
+    // Fall through to plain text fallback
+  }
+
+  return copyTextSafe(plainText);
 }
 
 export function exportProfileAsHtml(
@@ -159,11 +371,12 @@ export async function exportProfileAsDocx(
     fontSizePx: number;
   },
 ): Promise<void> {
+  const { Document, Packer, Paragraph, TextRun } = await import('docx');
   const refMap = new Map(referenceLists.map((r) => [r.id, r]));
   const halfPoints = Math.max(18, Math.round(options.fontSizePx * 1.5)); // Word uses half-points (24 = 12pt)
 
-  let currentRuns: TextRun[] = [];
-  const paragraphs: Paragraph[] = [];
+  let currentRuns: InstanceType<typeof TextRun>[] = [];
+  const paragraphs: InstanceType<typeof Paragraph>[] = [];
 
   const pushTextWithNewlines = (raw: string, hexColor: string | null) => {
     if (!raw) return;

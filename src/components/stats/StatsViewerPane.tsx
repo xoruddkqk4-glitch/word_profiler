@@ -248,7 +248,7 @@ export const StatsViewerPane: React.FC = () => {
             title="6개 모든 통계 탭을 단일 Excel(.xlsx) 워크북으로 다운로드"
             onClick={() => {
               if (!bundle) return;
-              exportAllStatsAsXlsx(
+              void exportAllStatsAsXlsx(
                 bundle,
                 store.settings.showFullPathsInStats,
               );

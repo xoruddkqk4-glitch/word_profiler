@@ -1,10 +1,36 @@
-import mammoth from 'mammoth';
-import * as pdfjsLib from 'pdfjs-dist';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { TargetFileItem } from '../types/domain';
 
-// Bundle local PDF.js worker via Vite ?url asset import (no external CDN dependency)
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+type MammothApi = {
+  extractRawText: (input: {
+    arrayBuffer: ArrayBuffer;
+  }) => Promise<{ value: string }>;
+};
+
+let mammothPromise: Promise<MammothApi> | null = null;
+function loadMammoth(): Promise<MammothApi> {
+  if (!mammothPromise) {
+    mammothPromise = import('mammoth').then((mod) => {
+      const m = mod as unknown as { default?: MammothApi } & MammothApi;
+      return m.default ?? m;
+    });
+  }
+  return mammothPromise;
+}
+
+let pdfjsPromise: Promise<typeof import('pdfjs-dist')> | null = null;
+function loadPdfJs(): Promise<typeof import('pdfjs-dist')> {
+  if (!pdfjsPromise) {
+    pdfjsPromise = Promise.all([
+      import('pdfjs-dist'),
+      import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
+    ]).then(([pdfjsLib, workerUrlMod]) => {
+      // Bundle local PDF.js worker via Vite ?url asset import (no external CDN dependency)
+      pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrlMod.default;
+      return pdfjsLib;
+    });
+  }
+  return pdfjsPromise;
+}
 
 export function decodeTextBufferSmart(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -27,6 +53,7 @@ export function decodeTextBufferSmart(buffer: ArrayBuffer): string {
 }
 
 async function extractPdfText(buffer: ArrayBuffer): Promise<string> {
+  const pdfjsLib = await loadPdfJs();
   const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
   let pdf: Awaited<typeof loadingTask.promise> | null = null;
   try {
@@ -111,6 +138,7 @@ export async function readTargetFilesFromBrowser(
       if (ext === 'txt') {
         content = decodeTextBufferSmart(buffer);
       } else if (ext === 'docx') {
+        const mammoth = await loadMammoth();
         const res = await mammoth.extractRawText({ arrayBuffer: buffer });
         content = res.value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
       } else if (ext === 'pdf') {

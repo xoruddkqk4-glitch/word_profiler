@@ -28,6 +28,11 @@ import {
   parseRawFamilyGroups,
 } from '../core/wordlistParser';
 import {
+  parsePassageSet,
+  updatePassageContentAt,
+  type PassageItem,
+} from '../core/passageSetParser';
+import {
   getActiveAiModelId,
   getActiveAiProvider,
   hasActiveAiApiKey,
@@ -177,6 +182,7 @@ async function fetchStaticText(url: string): Promise<string> {
 
 let profileJobEpoch = 0;
 let statsJobEpoch = 0;
+let initAppPromise: Promise<void> | null = null;
 let activeAiAbortController: AbortController | null = null;
 const MAX_AI_SUGGESTION_CACHE = 32;
 const aiSuggestionCache = new Map<string, CombinedSuggestionResult>();
@@ -232,14 +238,17 @@ export interface ProfilerStoreState {
   // Target Corpus & Inline / File Edit Histories
   targetFiles: TargetFileItem[];
   fileHistories: Record<string, DocumentHistoryEntry>;
+  filePassageIndices: Record<string, number>;
   selectedTargetIds: string[];
   activeTargetFileId: string | null; // null = inline text mode
   inlineEditorOpen: boolean;
   inlineText: string;
+  inlinePassageIndex: number;
   inlineHistory: string[];
   inlineHistoryIndex: number;
   editorMode: 'profiled' | 'edit';
   plainFormatView: boolean; // Clear Format state
+  editSelectionText: string; // Active selection inside textarea in Edit Text mode
 
   // Reference Lists & Auxiliary Lists
   referenceLists: ReferenceListSource[];
@@ -352,6 +361,10 @@ export interface ProfilerStoreState {
   clearAllTargetFiles: () => Promise<void>;
 
   updateInlineText: (nextText: string) => void;
+  updateActiveEditableText: (nextText: string) => void;
+  setEditSelectionText: (text: string) => void;
+  setActivePassageIndex: (index: number) => Promise<void>;
+  stepActivePassage: (direction: 'prev' | 'next') => Promise<void>;
   undoInlineText: () => void;
   redoInlineText: () => void;
   canUndoActiveDocument: () => boolean;
@@ -372,8 +385,12 @@ export interface ProfilerStoreState {
   runProfileActive: () => Promise<void>;
   runUpdateStatistics: () => Promise<void>;
   runValidateLists: () => Promise<void>;
+  clearTokenSelection: () => void;
   selectWordForInspector: (rawToken: string | null) => void;
-  selectTokenInstance: (tokenIdx: number) => void;
+  selectTokenInstance: (
+    tokenIdx: number,
+    options?: { toggleIfSelected?: boolean },
+  ) => void;
   selectTokenRange: (startIdx: number, endIdx: number) => void;
   setSearchQuery: (q: string) => void;
   stepSearchMatch: (direction: 'next' | 'prev') => void;
@@ -434,6 +451,83 @@ function activeReferenceLevelCap(referenceLists: ReferenceListSource[]): number 
   return Math.max(1, referenceLists.filter((r) => r.enabled).length);
 }
 
+export interface ActivePassageContext {
+  isInline: boolean;
+  activeFile: TargetFileItem | null;
+  fullDocumentText: string;
+  passages: PassageItem[];
+  isMultiPassage: boolean;
+  activePassageIndex: number;
+  activePassage: PassageItem;
+  sourceId: string;
+  sourceName: string;
+}
+
+export function resolveActivePassageContext(
+  st: Pick<
+    ProfilerStoreState,
+    | 'activeTargetFileId'
+    | 'targetFiles'
+    | 'filePassageIndices'
+    | 'inlineText'
+    | 'inlinePassageIndex'
+  >,
+): ActivePassageContext {
+  const activeFile = st.activeTargetFileId
+    ? st.targetFiles.find((f) => f.id === st.activeTargetFileId) ?? null
+    : null;
+  const isInline = activeFile === null;
+  const fullDocumentText = activeFile ? activeFile.content : st.inlineText;
+  const passages = parsePassageSet(fullDocumentText);
+  const isMultiPassage = passages.length > 1;
+  const rawIdx = activeFile
+    ? st.filePassageIndices[activeFile.id] ?? 0
+    : st.inlinePassageIndex;
+  const activePassageIndex = Math.max(
+    0,
+    Math.min(rawIdx, passages.length - 1),
+  );
+  const activePassage = passages[activePassageIndex];
+  const baseId = activeFile ? activeFile.id : '__inline__';
+  const baseName = activeFile ? activeFile.name : 'Inline Text';
+
+  return {
+    isInline,
+    activeFile,
+    fullDocumentText,
+    passages,
+    isMultiPassage,
+    activePassageIndex,
+    activePassage,
+    sourceId: isMultiPassage ? `${baseId}#p${activePassageIndex}` : baseId,
+    sourceName: isMultiPassage
+      ? `${baseName} (${activePassageIndex + 1}/${passages.length} · ${activePassage.label})`
+      : baseName,
+  };
+}
+
+function expandFilesForStatistics(files: TargetFileItem[]): TargetFileItem[] {
+  const expanded: TargetFileItem[] = [];
+  for (const f of files) {
+    const passages = parsePassageSet(f.content);
+    if (passages.length <= 1) {
+      expanded.push(f);
+    } else {
+      for (const p of passages) {
+        expanded.push({
+          ...f,
+          id: `${f.id}#p${p.index}`,
+          name: `${f.name} [${p.index + 1}/${passages.length} · ${p.label}]`,
+          path: `${f.path}#${p.index + 1}`,
+          content: p.content,
+          sizeBytes: new Blob([p.content]).size,
+        });
+      }
+    }
+  }
+  return expanded;
+}
+
 const initialPrefs = loadPersistedPrefs();
 const initialOpenRouterConfig = loadOpenRouterConfig();
 
@@ -461,11 +555,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
   };
 
   const getActiveDocumentText = (): string => {
-    const st = get();
-    if (st.activeTargetFileId === null) return st.inlineText;
-    return (
-      st.targetFiles.find((f) => f.id === st.activeTargetFileId)?.content ?? ''
-    );
+    return resolveActivePassageContext(get()).activePassage.content;
   };
 
   const assertProfileStillCurrent = (
@@ -511,15 +601,25 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     }
   };
 
-  const commitActiveDocumentText = (nextText: string): boolean => {
+  const commitActiveDocumentText = (nextPassageText: string): boolean => {
     const st = get();
-    if (st.activeTargetFileId === null) {
+    const ctx = resolveActivePassageContext(st);
+    const nextFullText = ctx.isMultiPassage
+      ? updatePassageContentAt(
+          ctx.fullDocumentText,
+          ctx.activePassageIndex,
+          nextPassageText,
+        ).fullText
+      : nextPassageText;
+
+    if (ctx.isInline) {
       const cur = st.inlineHistory[st.inlineHistoryIndex] ?? '';
-      if (nextText === cur) return false;
+      if (nextFullText === cur) return false;
       const sliced = st.inlineHistory.slice(0, st.inlineHistoryIndex + 1);
-      const capped = [...sliced.slice(-49), nextText];
+      const capped = [...sliced.slice(-49), nextFullText];
       set({
-        inlineText: nextText,
+        inlineText: nextFullText,
+        inlinePassageIndex: ctx.activePassageIndex,
         inlineHistory: capped,
         inlineHistoryIndex: capped.length - 1,
         statsStale: true,
@@ -527,27 +627,31 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       return true;
     }
 
-    const fileId = st.activeTargetFileId;
-    const targetFile = st.targetFiles.find((f) => f.id === fileId);
-    if (!targetFile || targetFile.content === nextText) return false;
+    const fileId = ctx.activeFile!.id;
+    const targetFile = ctx.activeFile!;
+    if (targetFile.content === nextFullText) return false;
 
     const existingHist = st.fileHistories[fileId] ?? {
       stack: [targetFile.content],
       index: 0,
     };
     const sliced = existingHist.stack.slice(0, existingHist.index + 1);
-    const capped = [...sliced.slice(-49), nextText];
+    const capped = [...sliced.slice(-49), nextFullText];
 
     set({
       targetFiles: st.targetFiles.map((f) =>
         f.id === fileId
           ? {
               ...f,
-              content: nextText,
-              sizeBytes: new Blob([nextText]).size,
+              content: nextFullText,
+              sizeBytes: new Blob([nextFullText]).size,
             }
           : f,
       ),
+      filePassageIndices: {
+        ...st.filePassageIndices,
+        [fileId]: ctx.activePassageIndex,
+      },
       fileHistories: {
         ...st.fileHistories,
         [fileId]: { stack: capped, index: capped.length - 1 },
@@ -570,14 +674,17 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
 
     targetFiles: [],
     fileHistories: {},
+    filePassageIndices: {},
     selectedTargetIds: [],
     activeTargetFileId: null,
     inlineEditorOpen: false,
     inlineText: '',
+    inlinePassageIndex: 0,
     inlineHistory: [''],
     inlineHistoryIndex: 0,
     editorMode: 'edit',
     plainFormatView: false,
+    editSelectionText: '',
 
     referenceLists: [],
     ignoreEnabled: true,
@@ -631,37 +738,45 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
 
     initializeApp: async () => {
       if (get().initialized) return;
-      const curTheme = get().theme;
-      document.documentElement.dataset.theme = curTheme;
-      document.documentElement.classList.toggle('dark', curTheme === 'dark');
-      set({
-        isBusy: true,
-        statusMessage: '내장 단어장 매니페스트 로드 중...',
+      if (initAppPromise) return initAppPromise;
+
+      initAppPromise = (async () => {
+        const curTheme = get().theme;
+        document.documentElement.dataset.theme = curTheme;
+        document.documentElement.classList.toggle('dark', curTheme === 'dark');
+        set({
+          isBusy: true,
+          statusMessage: '내장 단어장 매니페스트 로드 중...',
+        });
+
+        try {
+          const res = await fetch(
+            resolvePublicAssetUrl('wordlists/manifest.json'),
+          );
+          if (!res.ok) {
+            throw new Error(`매니페스트 로드 실패 (${res.status})`);
+          }
+          const manifest = (await res.json()) as WordlistManifest;
+          set({ manifest, initialized: true });
+
+          const desiredPreset =
+            manifest.presets.find((p) => p.id === get().activePresetId)?.id ??
+            manifest.presets[0].id;
+          await get().applyPreset(desiredPreset);
+        } catch (err) {
+          set({
+            initialized: true,
+            isBusy: false,
+            errorBanner:
+              err instanceof Error ? err.message : '초기화에 실패했습니다.',
+            statusMessage: '초기화 오류',
+          });
+        }
+      })().finally(() => {
+        initAppPromise = null;
       });
 
-      try {
-        const res = await fetch(
-          resolvePublicAssetUrl('wordlists/manifest.json'),
-        );
-        if (!res.ok) {
-          throw new Error(`매니페스트 로드 실패 (${res.status})`);
-        }
-        const manifest = (await res.json()) as WordlistManifest;
-        set({ manifest, initialized: true });
-
-        const desiredPreset =
-          manifest.presets.find((p) => p.id === get().activePresetId)?.id ??
-          manifest.presets[0].id;
-        await get().applyPreset(desiredPreset);
-      } catch (err) {
-        set({
-          initialized: true,
-          isBusy: false,
-          errorBanner:
-            err instanceof Error ? err.message : '초기화에 실패했습니다.',
-          statusMessage: '초기화 오류',
-        });
-      }
+      return initAppPromise;
     },
 
     setTheme: (theme) => {
@@ -718,9 +833,12 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
           .map((id) => manifest.lists.find((l) => l.id === id))
           .filter((x): x is NonNullable<typeof x> => Boolean(x));
 
-        const contents = await Promise.all(
-          listEntries.map((entry) => fetchStaticText(entry.url)),
-        );
+        const [contents, masterText] = await Promise.all([
+          Promise.all(listEntries.map((entry) => fetchStaticText(entry.url))),
+          preset.enableBuiltinMaster
+            ? fetchStaticText(manifest.auxiliary.builtinMasterFamilies.url)
+            : Promise.resolve(null),
+        ]);
 
         const nextRefs: ReferenceListSource[] = listEntries.map(
           (entry, idx) => {
@@ -740,10 +858,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         );
 
         let nextMaster = get().masterList;
-        if (preset.enableBuiltinMaster) {
-          const masterText = await fetchStaticText(
-            manifest.auxiliary.builtinMasterFamilies.url,
-          );
+        if (preset.enableBuiltinMaster && masterText !== null) {
           nextMaster = {
             enabled: true,
             name: manifest.auxiliary.builtinMasterFamilies.name,
@@ -1231,25 +1346,33 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       const prev = get().targetFiles;
       const next = [...prev, ...items];
       const nextHistories = { ...get().fileHistories };
+      const nextPassageIndices = { ...get().filePassageIndices };
       for (const it of items) {
         nextHistories[it.id] = { stack: [it.content], index: 0 };
+        nextPassageIndices[it.id] = 0;
       }
       const firstId = items[0].id;
+      const firstPassages = parsePassageSet(items[0].content);
       abortAndResetAiSession();
       set({
         targetFiles: next,
         fileHistories: nextHistories,
+        filePassageIndices: nextPassageIndices,
         selectedTargetIds: [firstId],
         activeTargetFileId: firstId,
         inlineEditorOpen: false,
         editorMode: 'profiled',
         plainFormatView: false,
+        editSelectionText: '',
         selectedWordKey: null,
         selectedRawToken: null,
         selectedTokenSpan: null,
         ...clearAiResults(),
         statsStale: true,
-        statusMessage: `${items.length}개 타겟 파일 로드됨`,
+        statusMessage:
+          firstPassages.length > 1
+            ? `세트 파일 로드됨: ${items[0].name} (총 ${firstPassages.length}개 문항 감지 — 이전/다음 문항 버튼으로 이동 가능)`
+            : `${items.length}개 타겟 파일 로드됨`,
       });
       await get().runProfileActive();
       if (get().activeMainTab === 'statistics') {
@@ -1271,6 +1394,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         activeMainTab: 'profiler',
         editorMode: 'profiled',
         plainFormatView: false,
+        editSelectionText: '',
         selectedWordKey: null,
         selectedRawToken: null,
         selectedTokenSpan: null,
@@ -1288,10 +1412,12 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         selectedTargetIds: [],
         inlineEditorOpen: true,
         inlineText: '',
+        inlinePassageIndex: 0,
         inlineHistory: [''],
         inlineHistoryIndex: 0,
         editorMode: 'edit',
         plainFormatView: false,
+        editSelectionText: '',
         activeProfile: null,
         isBusy: false,
         progressPercent: 0,
@@ -1317,10 +1443,13 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         selectedTargetIds: [],
         inlineEditorOpen: true,
         inlineText: text,
+        inlinePassageIndex:
+          initialText !== undefined ? 0 : get().inlinePassageIndex,
         inlineHistory: [text],
         inlineHistoryIndex: 0,
         editorMode: desiredMode,
         plainFormatView: false,
+        editSelectionText: '',
         selectedWordKey: null,
         selectedRawToken: null,
         selectedTokenSpan: null,
@@ -1349,11 +1478,13 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         selectedTargetIds: [],
         inlineEditorOpen: true,
         inlineText: SAMPLE_ENGLISH_PASSAGE,
+        inlinePassageIndex: 0,
         inlineHistory: [SAMPLE_ENGLISH_PASSAGE],
         inlineHistoryIndex: 0,
         activeMainTab: 'profiler',
         editorMode: 'profiled',
         plainFormatView: false,
+        editSelectionText: '',
         selectedWordKey: null,
         selectedRawToken: null,
         selectedTokenSpan: null,
@@ -1368,6 +1499,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         targetFiles,
         activeTargetFileId,
         fileHistories,
+        filePassageIndices,
         selectedTargetIds,
       } = get();
       const target = targetFiles.find((f) => f.id === id);
@@ -1376,12 +1508,15 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       const remaining = targetFiles.filter((f) => f.id !== id);
       const nextHistories = { ...fileHistories };
       delete nextHistories[id];
+      const nextPassageIndices = { ...filePassageIndices };
+      delete nextPassageIndices[id];
       const nextSelected = selectedTargetIds.filter((x) => x !== id);
 
       if (activeTargetFileId !== id) {
         set({
           targetFiles: remaining,
           fileHistories: nextHistories,
+          filePassageIndices: nextPassageIndices,
           selectedTargetIds: nextSelected,
           statsStale: true,
           statusMessage: `'${target.name}' 파일을 닫았습니다.`,
@@ -1394,8 +1529,10 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       set({
         targetFiles: remaining,
         fileHistories: nextHistories,
+        filePassageIndices: nextPassageIndices,
         selectedTargetIds: nextActiveId ? [nextActiveId] : [],
         activeTargetFileId: nextActiveId,
+        editSelectionText: '',
         selectedWordKey: null,
         selectedRawToken: null,
         selectedTokenSpan: null,
@@ -1412,14 +1549,17 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         selectedTargetIds,
         activeTargetFileId,
         fileHistories,
+        filePassageIndices,
       } = get();
       if (selectedTargetIds.length === 0) return;
       abortAndResetAiSession();
       const removeSet = new Set(selectedTargetIds);
       const remaining = targetFiles.filter((f) => !removeSet.has(f.id));
       const nextHistories = { ...fileHistories };
+      const nextPassageIndices = { ...filePassageIndices };
       for (const remId of selectedTargetIds) {
         delete nextHistories[remId];
+        delete nextPassageIndices[remId];
       }
       const activeRemoved =
         activeTargetFileId !== null && removeSet.has(activeTargetFileId);
@@ -1430,8 +1570,10 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       set({
         targetFiles: remaining,
         fileHistories: nextHistories,
+        filePassageIndices: nextPassageIndices,
         selectedTargetIds: nextActiveId ? [nextActiveId] : [],
         activeTargetFileId: nextActiveId,
+        editSelectionText: '',
         selectedWordKey: null,
         selectedRawToken: null,
         selectedTokenSpan: null,
@@ -1447,8 +1589,10 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       set({
         targetFiles: [],
         fileHistories: {},
+        filePassageIndices: {},
         selectedTargetIds: [],
         activeTargetFileId: null,
+        editSelectionText: '',
         activeProfile: get().inlineText.trim() ? get().activeProfile : null,
         selectedWordKey: null,
         selectedRawToken: null,
@@ -1465,17 +1609,87 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     },
 
     updateInlineText: (nextText) => {
-      const { inlineHistory, inlineHistoryIndex } = get();
+      const { inlineHistory, inlineHistoryIndex, inlinePassageIndex } = get();
       const current = inlineHistory[inlineHistoryIndex] ?? '';
       if (nextText === current) return;
       const sliced = inlineHistory.slice(0, inlineHistoryIndex + 1);
       const capped = [...sliced.slice(-49), nextText];
+      const nextPassages = parsePassageSet(nextText);
+      const clampedIdx = Math.max(
+        0,
+        Math.min(inlinePassageIndex, nextPassages.length - 1),
+      );
       set({
         inlineText: nextText,
+        inlinePassageIndex: clampedIdx,
         inlineHistory: capped,
         inlineHistoryIndex: capped.length - 1,
         statsStale: true,
       });
+    },
+
+    updateActiveEditableText: (nextText) => {
+      const st = get();
+      if (st.activeTargetFileId === null) {
+        st.updateInlineText(nextText);
+        return;
+      }
+      commitActiveDocumentText(nextText);
+    },
+
+    setEditSelectionText: (text) => {
+      if (get().editSelectionText !== text) {
+        set({ editSelectionText: text });
+      }
+    },
+
+    setActivePassageIndex: async (index) => {
+      const st = get();
+      const ctx = resolveActivePassageContext(st);
+      if (!ctx.isMultiPassage) return;
+      const clamped = Math.max(0, Math.min(index, ctx.passages.length - 1));
+      if (clamped === ctx.activePassageIndex) return;
+
+      abortAndResetAiSession();
+      if (ctx.isInline) {
+        set({
+          inlinePassageIndex: clamped,
+          plainFormatView: false,
+          editSelectionText: '',
+          selectedWordKey: null,
+          selectedRawToken: null,
+          selectedTokenSpan: null,
+          ...clearAiResults(),
+        });
+      } else if (ctx.activeFile) {
+        set({
+          filePassageIndices: {
+            ...st.filePassageIndices,
+            [ctx.activeFile.id]: clamped,
+          },
+          plainFormatView: false,
+          editSelectionText: '',
+          selectedWordKey: null,
+          selectedRawToken: null,
+          selectedTokenSpan: null,
+          ...clearAiResults(),
+        });
+      }
+
+      if (get().editorMode === 'profiled') {
+        await get().runProfileActive();
+      }
+    },
+
+    stepActivePassage: async (direction) => {
+      const ctx = resolveActivePassageContext(get());
+      if (!ctx.isMultiPassage) return;
+      const target =
+        direction === 'prev'
+          ? ctx.activePassageIndex - 1
+          : ctx.activePassageIndex + 1;
+      if (target < 0 || target >= ctx.passages.length) return;
+      await get().setActivePassageIndex(target);
     },
 
     canUndoActiveDocument: () => {
@@ -1502,9 +1716,17 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         if (st.inlineHistoryIndex <= 0) return;
         abortAndResetAiSession();
         const nextIdx = st.inlineHistoryIndex - 1;
+        const restored = st.inlineHistory[nextIdx];
+        const parsed = parsePassageSet(restored);
+        const clampedPassageIdx = Math.max(
+          0,
+          Math.min(st.inlinePassageIndex, parsed.length - 1),
+        );
         set({
           inlineHistoryIndex: nextIdx,
-          inlineText: st.inlineHistory[nextIdx],
+          inlineText: restored,
+          inlinePassageIndex: clampedPassageIdx,
+          editSelectionText: '',
           selectedWordKey: null,
           selectedRawToken: null,
           selectedTokenSpan: null,
@@ -1522,22 +1744,34 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       abortAndResetAiSession();
       const nextIdx = h.index - 1;
       const restored = h.stack[nextIdx];
+      const parsed = parsePassageSet(restored);
+      const clampedPassageIdx = Math.max(
+        0,
+        Math.min(st.filePassageIndices[fileId] ?? 0, parsed.length - 1),
+      );
       set({
         targetFiles: st.targetFiles.map((f) =>
           f.id === fileId
             ? { ...f, content: restored, sizeBytes: new Blob([restored]).size }
             : f,
         ),
+        filePassageIndices: {
+          ...st.filePassageIndices,
+          [fileId]: clampedPassageIdx,
+        },
         fileHistories: {
           ...st.fileHistories,
           [fileId]: { ...h, index: nextIdx },
         },
+        editSelectionText: '',
         selectedWordKey: null,
         selectedRawToken: null,
         selectedTokenSpan: null,
         statsStale: true,
       });
-      void get().runProfileActive();
+      if (st.editorMode === 'profiled') {
+        void get().runProfileActive();
+      }
     },
 
     redoInlineText: () => {
@@ -1546,9 +1780,17 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         if (st.inlineHistoryIndex >= st.inlineHistory.length - 1) return;
         abortAndResetAiSession();
         const nextIdx = st.inlineHistoryIndex + 1;
+        const restored = st.inlineHistory[nextIdx];
+        const parsed = parsePassageSet(restored);
+        const clampedPassageIdx = Math.max(
+          0,
+          Math.min(st.inlinePassageIndex, parsed.length - 1),
+        );
         set({
           inlineHistoryIndex: nextIdx,
-          inlineText: st.inlineHistory[nextIdx],
+          inlineText: restored,
+          inlinePassageIndex: clampedPassageIdx,
+          editSelectionText: '',
           selectedWordKey: null,
           selectedRawToken: null,
           selectedTokenSpan: null,
@@ -1566,22 +1808,34 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       abortAndResetAiSession();
       const nextIdx = h.index + 1;
       const restored = h.stack[nextIdx];
+      const parsed = parsePassageSet(restored);
+      const clampedPassageIdx = Math.max(
+        0,
+        Math.min(st.filePassageIndices[fileId] ?? 0, parsed.length - 1),
+      );
       set({
         targetFiles: st.targetFiles.map((f) =>
           f.id === fileId
             ? { ...f, content: restored, sizeBytes: new Blob([restored]).size }
             : f,
         ),
+        filePassageIndices: {
+          ...st.filePassageIndices,
+          [fileId]: clampedPassageIdx,
+        },
         fileHistories: {
           ...st.fileHistories,
           [fileId]: { ...h, index: nextIdx },
         },
+        editSelectionText: '',
         selectedWordKey: null,
         selectedRawToken: null,
         selectedTokenSpan: null,
         statsStale: true,
       });
-      void get().runProfileActive();
+      if (st.editorMode === 'profiled') {
+        void get().runProfileActive();
+      }
     },
 
     applyTokenSpanReplacement: async (startIdx, endIdx, replacementText) => {
@@ -1679,10 +1933,10 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     setEditorMode: (mode) => {
       if (mode === 'edit') {
         profileJobEpoch += 1;
-        set({ editorMode: 'edit', isBusy: false });
+        set({ editorMode: 'edit', editSelectionText: '', isBusy: false });
         return;
       }
-      set({ editorMode: 'profiled' });
+      set({ editorMode: 'profiled', editSelectionText: '' });
       void get().runProfileActive();
     },
 
@@ -1695,13 +1949,9 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
 
     runProfileActive: async () => {
       const st = get();
-      const activeFile = st.activeTargetFileId
-        ? st.targetFiles.find((f) => f.id === st.activeTargetFileId) ?? null
-        : null;
-
-      const sourceId = activeFile ? activeFile.id : '__inline__';
-      const sourceName = activeFile ? activeFile.name : 'Inline Text';
-      const text = activeFile ? activeFile.content : st.inlineText;
+      const ctx = resolveActivePassageContext(st);
+      const { sourceId, sourceName } = ctx;
+      const text = ctx.activePassage.content;
 
       if (!text.trim()) {
         set({
@@ -1785,12 +2035,31 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       try {
         const isViewingInline =
           st.activeTargetFileId === null && st.inlineText.trim().length > 0;
+        const inlinePassages = isViewingInline
+          ? parsePassageSet(st.inlineText)
+          : [];
+        const inlineExpandedFiles: TargetFileItem[] =
+          isViewingInline && inlinePassages.length > 1
+            ? inlinePassages.map((p) => ({
+                id: `__inline__#p${p.index}`,
+                name: `Inline_Text.txt [${p.index + 1}/${inlinePassages.length} · ${p.label}]`,
+                path: `Inline_Text.txt#${p.index + 1}`,
+                sourceType: 'inline' as const,
+                content: p.content,
+                sizeBytes: new Blob([p.content]).size,
+                addedAt: Date.now(),
+              }))
+            : [];
+
         const bundle = await profilerWorkerClient.computeAllStats(
           {
-            targetFiles: isViewingInline ? [] : st.targetFiles,
-            inlineDraft: isViewingInline
-              ? { name: 'Inline_Text.txt', content: st.inlineText }
-              : null,
+            targetFiles: isViewingInline
+              ? inlineExpandedFiles
+              : expandFilesForStatistics(st.targetFiles),
+            inlineDraft:
+              isViewingInline && inlinePassages.length <= 1
+                ? { name: 'Inline_Text.txt', content: st.inlineText }
+                : null,
             referenceLists: st.referenceLists,
             ignoreList: st.ignoreList,
             extraIgnoreWords: st.extraIgnoreWords,
@@ -1863,7 +2132,20 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       }
     },
 
-    selectTokenInstance: (tokenIdx) => {
+    clearTokenSelection: () => {
+      cancelActiveAiCall();
+      set({
+        selectedRawToken: null,
+        selectedWordKey: null,
+        selectedTokenSpan: null,
+        aiLoading: false,
+        aiError: null,
+        aiSuggestionModalOpen: false,
+        ...clearAiResults(),
+      });
+    },
+
+    selectTokenInstance: (tokenIdx, options) => {
       const st = get();
       const profile = st.activeProfile;
       if (!profile || tokenIdx < 0 || tokenIdx >= profile.tokens.length) {
@@ -1872,10 +2154,19 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
 
       const tok = profile.tokens[tokenIdx];
       const prevSpan = st.selectedTokenSpan;
-      const isSameSingleToken =
-        prevSpan &&
-        prevSpan.startTokenIdx === tokenIdx &&
-        prevSpan.endTokenIdx === tokenIdx;
+      const isMultiSpan = Boolean(
+        prevSpan && prevSpan.endTokenIdx > prevSpan.startTokenIdx,
+      );
+      const isSameSingleToken = Boolean(
+        !isMultiSpan &&
+          ((prevSpan !== null && prevSpan.startTokenIdx === tokenIdx) ||
+            (prevSpan === null && st.selectedWordKey === tok.lookupKey)),
+      );
+
+      if (options?.toggleIfSelected && isSameSingleToken) {
+        get().clearTokenSelection();
+        return;
+      }
 
       if (!isSameSingleToken) {
         cancelActiveAiCall();
@@ -2368,3 +2659,12 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     },
   };
 });
+
+// Start fetching manifest + active preset immediately on module evaluation in browser
+if (
+  typeof window !== 'undefined' &&
+  typeof document !== 'undefined' &&
+  typeof fetch === 'function'
+) {
+  void useProfilerStore.getState().initializeApp();
+}

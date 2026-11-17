@@ -1,21 +1,50 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { BarChart3, FileSearch, UploadCloud, X } from 'lucide-react';
 import { LeftSidebar } from './components/layout/LeftSidebar';
 import { StatusBar } from './components/layout/StatusBar';
 import { TopMenuBar } from './components/layout/TopMenuBar';
-import { AiSuggestionModal } from './components/modals/AiSuggestionModal';
-import { CoverageContentModal } from './components/modals/CoverageContentModal';
-import { HelpAboutModal } from './components/modals/HelpAboutModal';
-import { SettingsModal } from './components/modals/SettingsModal';
-import { ValidateListsModal } from './components/modals/ValidateListsModal';
 import { FileProfilerPane } from './components/profiler/FileProfilerPane';
-import { StatsViewerPane } from './components/stats/StatsViewerPane';
+import {
+  buildRichProfileClipboardPayload,
+  copyRichTextSafe,
+} from './io/docExporters';
 import {
   formatFileReadErrors,
   readTargetFilesFromBrowser,
   readWordlistFilesFromBrowser,
 } from './io/fileReaders';
 import { useProfilerStore } from './store/useProfilerStore';
+
+const StatsViewerPane = React.lazy(() =>
+  import('./components/stats/StatsViewerPane').then((m) => ({
+    default: m.StatsViewerPane,
+  })),
+);
+const SettingsModal = React.lazy(() =>
+  import('./components/modals/SettingsModal').then((m) => ({
+    default: m.SettingsModal,
+  })),
+);
+const ValidateListsModal = React.lazy(() =>
+  import('./components/modals/ValidateListsModal').then((m) => ({
+    default: m.ValidateListsModal,
+  })),
+);
+const CoverageContentModal = React.lazy(() =>
+  import('./components/modals/CoverageContentModal').then((m) => ({
+    default: m.CoverageContentModal,
+  })),
+);
+const HelpAboutModal = React.lazy(() =>
+  import('./components/modals/HelpAboutModal').then((m) => ({
+    default: m.HelpAboutModal,
+  })),
+);
+const AiSuggestionModal = React.lazy(() =>
+  import('./components/modals/AiSuggestionModal').then((m) => ({
+    default: m.AiSuggestionModal,
+  })),
+);
 
 export const App: React.FC = () => {
   const store = useProfilerStore();
@@ -27,10 +56,10 @@ export const App: React.FC = () => {
   const shortcutFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    void store.initializeApp();
-  }, [store]);
+    void useProfilerStore.getState().initializeApp();
+  }, []);
 
-  // Global keyboard shortcuts (F5 refresh, Ctrl+F search focus, Ctrl+O open target files, Ctrl+Z/Y undo/redo)
+  // Global keyboard shortcuts (F5 refresh, Ctrl+F search focus, Ctrl+O open target files, Alt+Arrows passage step, Ctrl+C rich selection copy, Ctrl+Z/Y undo/redo)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F5') {
@@ -51,28 +80,82 @@ export const App: React.FC = () => {
         }
         return;
       }
+
+      const target = e.target as HTMLElement | null;
+      const isEditable = Boolean(
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable),
+      );
+
+      const st = useProfilerStore.getState();
+      const modalOpen = Boolean(
+        st.settingsModalOpen ||
+        st.helpModalTab ||
+        st.coverageModal ||
+        st.validationModal ||
+        st.aiSuggestionModalOpen,
+      );
+
+      // Alt + Left / Right: step between passages in a multi-item set .txt
+      if (
+        e.altKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !isEditable &&
+        !modalOpen &&
+        st.activeMainTab === 'profiler'
+      ) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          void st.stepActivePassage('prev');
+          return;
+        }
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          void st.stepActivePassage('next');
+          return;
+        }
+      }
+
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
         const key = e.key.toLowerCase();
-        if (key !== 'z' && key !== 'y') return;
-        const target = e.target as HTMLElement | null;
-        const isEditable = Boolean(
-          target &&
-            (target.tagName === 'INPUT' ||
-              target.tagName === 'TEXTAREA' ||
-              target.tagName === 'SELECT' ||
-              target.isContentEditable),
-        );
-        if (isEditable) return;
+        if (isEditable || modalOpen || st.activeMainTab !== 'profiler') return;
 
-        const st = useProfilerStore.getState();
-        const modalOpen = Boolean(
-          st.settingsModalOpen ||
-            st.helpModalTab ||
-            st.coverageModal ||
-            st.validationModal ||
-            st.aiSuggestionModalOpen,
-        );
-        if (modalOpen || st.activeMainTab !== 'profiler') return;
+        // Ctrl+C when a word/phrase is selected via click (no live browser text range)
+        if (
+          key === 'c' &&
+          !e.shiftKey &&
+          st.editorMode === 'profiled' &&
+          st.activeProfile &&
+          st.selectedTokenSpan
+        ) {
+          const domSel = window.getSelection();
+          if (!domSel || domSel.isCollapsed) {
+            e.preventDefault();
+            const payload = buildRichProfileClipboardPayload(
+              st.activeProfile,
+              st.referenceLists,
+              {
+                showLevels: st.settings.showLevels,
+                ignoreEnabled: st.ignoreEnabled,
+                ignoreColor: st.ignoreColor,
+                outColor: st.outColor,
+                plainFormatView: st.plainFormatView,
+              },
+              {
+                startTokenIdx: st.selectedTokenSpan.startTokenIdx,
+                endTokenIdx: st.selectedTokenSpan.endTokenIdx,
+              },
+            );
+            void copyRichTextSafe(payload.plainText, payload.htmlText);
+            return;
+          }
+        }
+
+        if (key !== 'z' && key !== 'y') return;
 
         if (key === 'z' && !e.shiftKey && st.canUndoActiveDocument()) {
           e.preventDefault();
@@ -280,19 +363,29 @@ export const App: React.FC = () => {
           {store.activeMainTab === 'profiler' ? (
             <FileProfilerPane searchInputRef={searchInputRef} />
           ) : (
-            <StatsViewerPane />
+            <Suspense
+              fallback={
+                <div className="stage-empty-state">
+                  <p className="stage-empty-desc">통계 화면을 불러오는 중...</p>
+                </div>
+              }
+            >
+              <StatsViewerPane />
+            </Suspense>
           )}
         </main>
       </div>
 
       <StatusBar />
 
-      {/* Modals */}
-      <SettingsModal />
-      <ValidateListsModal />
-      <CoverageContentModal />
-      <HelpAboutModal />
-      <AiSuggestionModal />
+      {/* Lazy Modals (mounted only when opened) */}
+      <Suspense fallback={null}>
+        {store.settingsModalOpen && <SettingsModal />}
+        {store.validationModal && <ValidateListsModal />}
+        {store.coverageModal && <CoverageContentModal />}
+        {store.helpModalTab && <HelpAboutModal />}
+        {store.aiSuggestionModalOpen && <AiSuggestionModal />}
+      </Suspense>
     </div>
   );
 };

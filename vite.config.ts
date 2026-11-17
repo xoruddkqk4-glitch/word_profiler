@@ -18,11 +18,42 @@ export default defineConfig({
       },
     ],
   },
+  server: {
+    warmup: {
+      clientFiles: [
+        './src/main.tsx',
+        './src/App.tsx',
+        './src/store/useProfilerStore.ts',
+        './src/components/profiler/FileProfilerPane.tsx',
+        './src/components/profiler/EditorToolbar.tsx',
+        './src/components/layout/LeftSidebar.tsx',
+        './src/components/layout/TopMenuBar.tsx',
+      ],
+    },
+  },
   worker: {
     format: 'es',
   },
   optimizeDeps: {
-    include: ['xlsx', 'jszip', 'docx'],
+    include: [
+      'react',
+      'react-dom',
+      'react-dom/client',
+      'zustand',
+      'lucide-react',
+      'xlsx',
+      'jszip',
+      'docx',
+    ],
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'zustand'],
+        },
+      },
+    },
   },
   test: {
     environment: 'node',

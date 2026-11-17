@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import type { StatsSubTabId } from '../types/domain';
 import type { CorpusStatisticsBundle } from '../types/stats';
 import { copyTextSafe, triggerBrowserDownload } from './docExporters';
@@ -228,10 +227,11 @@ export function exportSingleStatTabAsTsv(
   triggerBrowserDownload(blob, `antwordprofiler_${slug}.tsv`);
 }
 
-export function exportAllStatsAsXlsx(
+export async function exportAllStatsAsXlsx(
   bundle: CorpusStatisticsBundle,
   showFullPaths: boolean,
-): void {
+): Promise<void> {
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   const order: StatsSubTabId[] = [
     'input_files',

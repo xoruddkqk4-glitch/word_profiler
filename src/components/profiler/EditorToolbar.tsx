@@ -1,31 +1,33 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Check,
   ChevronDown,
   ChevronUp,
-  ClipboardPaste,
   Copy,
+  CopyCheck,
   Edit3,
   Eye,
-  FileDown,
   FolderOpen,
   Minus,
   Plus,
   Redo2,
   Search,
-  Trash2,
   Type,
   Undo2,
 } from 'lucide-react';
 import {
+  buildRichProfileClipboardPayload,
+  copyRichTextSafe,
   copyTextSafe,
-  exportProfileAsDocx,
-  exportProfileAsTxt,
 } from '../../io/docExporters';
 import {
   formatFileReadErrors,
   readTargetFilesFromBrowser,
 } from '../../io/fileReaders';
-import { useProfilerStore } from '../../store/useProfilerStore';
+import {
+  resolveActivePassageContext,
+  useProfilerStore,
+} from '../../store/useProfilerStore';
 
 export interface EditorToolbarProps {
   searchInputRef: React.RefObject<HTMLInputElement | null>;
@@ -36,237 +38,234 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
 }) => {
   const store = useProfilerStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const fileMenuRef = useRef<HTMLDivElement>(null);
-  const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const copyFeedbackTimerRef = useRef<number | null>(null);
+  const [copiedKind, setCopiedKind] = useState<'all' | 'selection' | null>(
+    null,
+  );
 
-  const isInline = store.activeTargetFileId === null;
+  const passageCtx = useMemo(
+    () =>
+      resolveActivePassageContext({
+        activeTargetFileId: store.activeTargetFileId,
+        targetFiles: store.targetFiles,
+        filePassageIndices: store.filePassageIndices,
+        inlineText: store.inlineText,
+        inlinePassageIndex: store.inlinePassageIndex,
+      }),
+    [
+      store.activeTargetFileId,
+      store.targetFiles,
+      store.filePassageIndices,
+      store.inlineText,
+      store.inlinePassageIndex,
+    ],
+  );
+
+  const { isInline, activePassage } = passageCtx;
   const canUndo = store.canUndoActiveDocument();
   const canRedo = store.canRedoActiveDocument();
-  const activeFile = store.activeTargetFileId
-    ? store.targetFiles.find((f) => f.id === store.activeTargetFileId) ?? null
-    : null;
+
+  const profile = store.activeProfile;
+  const isEditingView = store.editorMode === 'edit' || !profile;
+  const editableText = isInline ? store.inlineText : activePassage.content;
+
+  const canCopyAll = isEditingView
+    ? editableText.length > 0
+    : Boolean(profile && profile.originalText.length > 0);
+
+  const canCopySelection = isEditingView
+    ? store.editSelectionText.length > 0
+    : Boolean(store.selectedTokenSpan || store.selectedRawToken);
 
   const hitCount = store.searchMatchTokenIndices.length;
   const cursorDisplay =
     hitCount > 0 ? `${store.activeSearchCursor + 1}/${hitCount}` : '0/0';
 
   useEffect(() => {
-    if (!fileMenuOpen) return;
-    const onPointerDown = (e: MouseEvent) => {
-      if (
-        fileMenuRef.current &&
-        !fileMenuRef.current.contains(e.target as Node)
-      ) {
-        setFileMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setFileMenuOpen(false);
-    };
-    window.addEventListener('mousedown', onPointerDown);
-    window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener('mousedown', onPointerDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [fileMenuOpen]);
-
-  const handlePasteClipboard = async () => {
-    try {
-      const clip = await navigator.clipboard.readText();
-      if (!clip) return;
-      if (store.activeTargetFileId !== null) {
-        await store.switchToInlineEditor(clip);
-      } else {
-        const merged = store.inlineText
-          ? `${store.inlineText}\n${clip}`
-          : clip;
-        store.updateInlineText(merged);
-        store.setEditorMode('edit');
+      if (copyFeedbackTimerRef.current !== null) {
+        window.clearTimeout(copyFeedbackTimerRef.current);
       }
-    } catch {
-      store.setErrorBanner(
-        '클립보드 접근 권한이 거부되었습니다. 에디터 영역에서 직접 Ctrl+V를 눌러 붙여넣어 주세요.',
+    };
+  }, []);
+
+  const triggerCopiedFeedback = (kind: 'all' | 'selection') => {
+    setCopiedKind(kind);
+    if (copyFeedbackTimerRef.current !== null) {
+      window.clearTimeout(copyFeedbackTimerRef.current);
+    }
+    copyFeedbackTimerRef.current = window.setTimeout(() => {
+      setCopiedKind(null);
+      copyFeedbackTimerRef.current = null;
+    }, 1400);
+  };
+
+  const handleCopyAll = async () => {
+    if (profile && (!isEditingView || profile.originalText === editableText)) {
+      const payload = buildRichProfileClipboardPayload(
+        profile,
+        store.referenceLists,
+        {
+          showLevels: store.settings.showLevels,
+          ignoreEnabled: store.ignoreEnabled,
+          ignoreColor: store.ignoreColor,
+          outColor: store.outColor,
+          plainFormatView: store.plainFormatView,
+        },
       );
+      const ok = await copyRichTextSafe(payload.plainText, payload.htmlText);
+      if (ok) {
+        triggerCopiedFeedback('all');
+        useProfilerStore.setState({
+          statusMessage:
+            '전체 지문을 서식(글자색·굵기)과 함께 클립보드에 복사했습니다.',
+        });
+      }
+      return;
+    }
+
+    if (editableText) {
+      const ok = await copyTextSafe(editableText);
+      if (ok) {
+        triggerCopiedFeedback('all');
+        useProfilerStore.setState({
+          statusMessage: '편집 중인 전체 텍스트를 클립보드에 복사했습니다.',
+        });
+      }
+    }
+  };
+
+  const handleCopySelection = async () => {
+    if (!isEditingView && profile) {
+      if (store.selectedTokenSpan) {
+        const payload = buildRichProfileClipboardPayload(
+          profile,
+          store.referenceLists,
+          {
+            showLevels: store.settings.showLevels,
+            ignoreEnabled: store.ignoreEnabled,
+            ignoreColor: store.ignoreColor,
+            outColor: store.outColor,
+            plainFormatView: store.plainFormatView,
+          },
+          {
+            startTokenIdx: store.selectedTokenSpan.startTokenIdx,
+            endTokenIdx: store.selectedTokenSpan.endTokenIdx,
+          },
+        );
+        const ok = await copyRichTextSafe(payload.plainText, payload.htmlText);
+        if (ok) {
+          triggerCopiedFeedback('selection');
+          useProfilerStore.setState({
+            statusMessage:
+              '선택 영역을 서식(글자색·굵기)과 함께 클립보드에 복사했습니다.',
+          });
+        }
+        return;
+      }
+
+      if (store.selectedRawToken) {
+        const hitIdx = store.selectedWordKey
+          ? profile.tokens.findIndex(
+            (t) => t.lookupKey === store.selectedWordKey,
+          )
+          : -1;
+        const ok =
+          hitIdx >= 0
+            ? await (async () => {
+              const payload = buildRichProfileClipboardPayload(
+                profile,
+                store.referenceLists,
+                {
+                  showLevels: store.settings.showLevels,
+                  ignoreEnabled: store.ignoreEnabled,
+                  ignoreColor: store.ignoreColor,
+                  outColor: store.outColor,
+                  plainFormatView: store.plainFormatView,
+                },
+                { startTokenIdx: hitIdx, endTokenIdx: hitIdx },
+              );
+              return copyRichTextSafe(payload.plainText, payload.htmlText);
+            })()
+            : await copyTextSafe(store.selectedRawToken);
+
+        if (ok) {
+          triggerCopiedFeedback('selection');
+          useProfilerStore.setState({
+            statusMessage:
+              '선택 단어를 서식(글자색·굵기)과 함께 클립보드에 복사했습니다.',
+          });
+        }
+      }
+      return;
+    }
+
+    if (store.editSelectionText) {
+      const ok = await copyTextSafe(store.editSelectionText);
+      if (ok) {
+        triggerCopiedFeedback('selection');
+        useProfilerStore.setState({
+          statusMessage: '선택한 텍스트를 클립보드에 복사했습니다.',
+        });
+      }
     }
   };
 
   return (
     <div className="editor-toolbar">
       <div className="toolbar-group">
-        <div className="file-switcher-wrap" ref={fileMenuRef}>
-          <button
-            type="button"
-            className="btn btn-sm file-switcher-btn"
-            title="열린 지문 파일 전환"
-            aria-expanded={fileMenuOpen}
-            aria-haspopup="menu"
-            onClick={() => setFileMenuOpen((v) => !v)}
-          >
-            {activeFile ? (
-              <>
-                <span className="file-ext-badge">{activeFile.sourceType}</span>
-                <span className="file-switcher-name">{activeFile.name}</span>
-              </>
-            ) : (
-              <>
-                <Type size={14} />
-                <span className="file-switcher-name">Inline Text</span>
-              </>
-            )}
-            <ChevronDown size={12} />
-            {store.targetFiles.length > 0 && (
-              <span className="count-badge tabular-nums">
-                {store.targetFiles.length}
-              </span>
-            )}
-          </button>
-          {fileMenuOpen && (
-            <div className="file-switcher-menu" role="menu">
-              <button
-                type="button"
-                className="menu-item"
-                role="menuitem"
-                data-active={isInline}
-                onClick={() => {
-                  setFileMenuOpen(false);
-                  void store.switchToInlineEditor();
-                }}
-              >
-                <span className="menu-item-left">
-                  <Type size={14} /> Inline Text
-                </span>
-              </button>
-              {store.targetFiles.map((file) => (
-                <div key={file.id} className="file-switcher-row">
-                  <button
-                    type="button"
-                    className="menu-item"
-                    role="menuitem"
-                    data-active={store.activeTargetFileId === file.id}
-                    onClick={() => {
-                      setFileMenuOpen(false);
-                      void store.openTargetFileInProfiler(file.id);
-                    }}
-                  >
-                    <span className="menu-item-left">
-                      <span className="file-ext-badge">{file.sourceType}</span>
-                      {file.name}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="mini-icon-btn"
-                    title={`${file.name} 닫기`}
-                    aria-label={`${file.name} 닫기`}
-                    onClick={() => void store.closeTargetFileById(file.id)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-              {store.targetFiles.length > 0 && (
-                <>
-                  <div className="menu-divider" />
-                  <button
-                    type="button"
-                    className="menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setFileMenuOpen(false);
-                      void store.clearAllTargetFiles();
-                    }}
-                  >
-                    <span className="menu-item-left">모든 파일 닫기</span>
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
+        <button
+          type="button"
+          className="btn btn-sm inline-mode-btn"
+          data-active={isInline}
+          title="직접 입력(Inline Text) 에디터로 전환"
+          onClick={() => {
+            if (!isInline) {
+              void store.switchToInlineEditor();
+            } else if (!store.inlineEditorOpen && !store.inlineText) {
+              store.openEmptyInlineEditor();
+            }
+          }}
+        >
+          <Type size={14} />
+          <span>Inline Text</span>
+        </button>
 
         <button
           type="button"
           className="btn btn-sm"
-          title="타겟 파일 열기 (.txt, .docx, .pdf)"
+          title="타겟 파일 열기 (.txt, .docx, .pdf — 복수 문항 세트 .txt 지원)"
           onClick={() => fileInputRef.current?.click()}
         >
           <FolderOpen size={15} /> Open
         </button>
 
-        <button
-          type="button"
-          className="btn btn-sm"
-          disabled={!store.activeProfile}
-          title="레벨 색상이 보존된 Word(.docx) 파일로 저장"
-          onClick={() => {
-            if (!store.activeProfile) return;
-            void exportProfileAsDocx(
-              store.activeProfile,
-              store.referenceLists,
-              {
-                showLevels: store.settings.showLevels,
-                ignoreEnabled: store.ignoreEnabled,
-                ignoreColor: store.ignoreColor,
-                outColor: store.outColor,
-                fontSizePx: store.settings.fontSizePx,
-              },
-            );
-          }}
-        >
-          <FileDown size={15} /> .docx
-        </button>
-
-        <button
-          type="button"
-          className="btn btn-sm"
-          disabled={!store.activeProfile}
-          title="순수 텍스트(.txt)로 저장"
-          onClick={() => {
-            if (!store.activeProfile) return;
-            exportProfileAsTxt(store.activeProfile);
-          }}
-        >
-          .txt
-        </button>
-
         <span className="toolbar-sep" />
 
-        {isInline ? (
-          <div className="segmented-toggle" role="group" aria-label="보기 및 편집 모드">
-            <button
-              type="button"
-              className="segmented-btn"
-              data-active={store.editorMode === 'profiled'}
-              onClick={() => store.setEditorMode('profiled')}
-            >
-              <Eye size={15} />
-              <span>Profiled</span>
-            </button>
-            <button
-              type="button"
-              className="segmented-btn"
-              data-active={store.editorMode === 'edit'}
-              onClick={() => store.setEditorMode('edit')}
-            >
-              <Edit3 size={15} />
-              <span>Edit Text</span>
-            </button>
-          </div>
-        ) : (
+        <div
+          className="segmented-toggle"
+          role="group"
+          aria-label="보기 및 편집 모드"
+        >
           <button
             type="button"
-            className="btn btn-sm"
-            title="현재 파일 내용을 인라인 편집기로 복사하여 어휘를 직접 수정합니다"
-            onClick={() => {
-              const txt =
-                activeFile?.content ?? store.activeProfile?.originalText ?? '';
-              void store.switchToInlineEditor(txt, { mode: 'edit' });
-            }}
+            className="segmented-btn"
+            data-active={store.editorMode === 'profiled'}
+            onClick={() => store.setEditorMode('profiled')}
           >
-            <Edit3 size={15} /> Edit Copy
+            <Eye size={15} />
+            <span>Profiled</span>
           </button>
-        )}
+          <button
+            type="button"
+            className="segmented-btn"
+            data-active={store.editorMode === 'edit'}
+            onClick={() => store.setEditorMode('edit')}
+          >
+            <Edit3 size={15} />
+            <span>Edit Text</span>
+          </button>
+        </div>
 
         <span className="toolbar-sep" />
 
@@ -293,25 +292,35 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
 
         <button
           type="button"
-          className="btn btn-icon btn-sm"
-          disabled={!store.activeProfile && !store.inlineText}
-          title="전체 본문 복사"
-          aria-label="전체 본문 복사"
-          onClick={() => {
-            const txt = store.activeProfile?.originalText ?? store.inlineText;
-            if (txt) void copyTextSafe(txt);
-          }}
+          className="btn btn-sm copy-feedback-btn"
+          data-copied={copiedKind === 'all'}
+          disabled={!canCopyAll}
+          title="현재 지문 전체를 글자 서식(글자색·굵기)과 함께 클립보드에 복사합니다"
+          onClick={() => void handleCopyAll()}
         >
-          <Copy size={15} />
+          {copiedKind === 'all' ? <Check size={14} /> : <Copy size={14} />}
+          <span>{copiedKind === 'all' ? '복사됨' : '전체 복사'}</span>
         </button>
+
         <button
           type="button"
-          className="btn btn-icon btn-sm"
-          title="클립보드 텍스트 붙여넣기"
-          aria-label="붙여넣기"
-          onClick={() => void handlePasteClipboard()}
+          className="btn btn-sm copy-feedback-btn"
+          data-copied={copiedKind === 'selection'}
+          disabled={!canCopySelection}
+          title={
+            canCopySelection
+              ? '선택한 단어·구문을 글자 서식(글자색·굵기)과 함께 클립보드에 복사합니다'
+              : '본문에서 단어를 클릭하거나 범위를 드래그해 선택한 뒤 복사하세요'
+          }
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => void handleCopySelection()}
         >
-          <ClipboardPaste size={15} />
+          {copiedKind === 'selection' ? (
+            <Check size={14} />
+          ) : (
+            <CopyCheck size={14} />
+          )}
+          <span>{copiedKind === 'selection' ? '복사됨' : '선택 복사'}</span>
         </button>
 
         <span className="toolbar-sep" />
@@ -408,4 +417,3 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
     </div>
   );
 };
-

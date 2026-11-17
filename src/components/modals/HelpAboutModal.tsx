@@ -87,9 +87,11 @@ export const HelpAboutModal: React.FC = () => {
                   불러오거나 <strong>Inline Text</strong>에 지문을 입력해{' '}
                   <strong>Start (F5)</strong>를 실행합니다. 좌측의{' '}
                   <strong>List Words / Non-List Words</strong> 토글로 등재 어휘 레벨별 색상
-                  보기와 미등재 어휘 집중 보기를 즉시 전환할 수 있으며, 상단 파일 선택
-                  드롭다운과 <strong>Edit Copy</strong>로 여러 문서 전환 및 직접 수정이
-                  가능합니다.
+                  보기와 미등재 어휘 집중 보기를 즉시 전환할 수 있습니다. 하나의 세트{' '}
+                  <code>.txt</code> 파일 안에 구분선(<code>---</code>, <code>===</code>),
+                  문항 헤더(<code>[18]</code>, <code>#1</code>, <code>문항 1</code>), 또는
+                  빈 줄 2줄 이상으로 여러 문항을 넣어 불러오면 <strong>이전 문항 / 다음 문항</strong>{' '}
+                  버튼으로 지문 간 빠른 이동과 개별 수정·Word Count 확인이 가능합니다.
                 </p>
               </div>
 
@@ -160,8 +162,20 @@ export const HelpAboutModal: React.FC = () => {
                   <td>검색창에서 다음 / 이전 일치 단어로 이동</td>
                 </tr>
                 <tr>
+                  <td className="mono">Alt + ← / Alt + →</td>
+                  <td>복수 문항 세트 .txt에서 이전 문항 / 다음 문항으로 이동</td>
+                </tr>
+                <tr>
                   <td className="mono">Ctrl + Z / Ctrl + Y</td>
                   <td>현재 문서 편집 및 AI 교체 실행 취소 / 다시 실행</td>
+                </tr>
+                <tr>
+                  <td className="mono">Click / Re-Click (본문 단어)</td>
+                  <td>단어 선택 및 선택된 단어 재클릭 시 선택 해제</td>
+                </tr>
+                <tr>
+                  <td className="mono">전체 복사 / 선택 복사 (Ctrl + C)</td>
+                  <td>글자 서식(글자색 + 굵기 Bold)을 보존하여 Word·한글에 붙여넣기 가능하도록 복사</td>
                 </tr>
                 <tr>
                   <td className="mono">Drag / Right Click (본문)</td>

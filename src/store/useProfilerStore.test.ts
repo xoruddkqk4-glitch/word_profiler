@@ -76,13 +76,16 @@ describe('useProfilerStore editor & safety invariants', () => {
     useProfilerStore.setState({
       targetFiles: [],
       fileHistories: {},
+      filePassageIndices: {},
       selectedTargetIds: [],
       activeTargetFileId: null,
       inlineEditorOpen: false,
       inlineText: '',
+      inlinePassageIndex: 0,
       inlineHistory: [''],
       inlineHistoryIndex: 0,
       editorMode: 'edit',
+      editSelectionText: '',
       activeProfile: null,
       selectedWordKey: null,
       selectedRawToken: null,
@@ -201,5 +204,82 @@ describe('useProfilerStore editor & safety invariants', () => {
     expect(st.activeProfile).toBe(profA);
     expect(st.selectedWordKey).toBe('alpha');
     expect(st.statsStale).toBe(true);
+  });
+
+  it('deselects a single selected word when clicked a second time with toggleIfSelected', () => {
+    const prof = makeMockProfile('__inline__', 'Inline Text', 'Alpha beta gamma');
+    useProfilerStore.setState({
+      activeProfile: prof,
+      editorMode: 'profiled',
+    });
+
+    // First click selects 'beta'
+    useProfilerStore.getState().selectTokenInstance(1, { toggleIfSelected: true });
+    expect(useProfilerStore.getState().selectedWordKey).toBe('beta');
+    expect(useProfilerStore.getState().selectedTokenSpan).toEqual({
+      startTokenIdx: 1,
+      endTokenIdx: 1,
+      rawText: 'beta',
+    });
+
+    // Right-click / programmatic select without toggleIfSelected keeps it selected
+    useProfilerStore.getState().selectTokenInstance(1);
+    expect(useProfilerStore.getState().selectedWordKey).toBe('beta');
+
+    // Second left-click toggles selection off
+    useProfilerStore.getState().selectTokenInstance(1, { toggleIfSelected: true });
+    expect(useProfilerStore.getState().selectedWordKey).toBeNull();
+    expect(useProfilerStore.getState().selectedRawToken).toBeNull();
+    expect(useProfilerStore.getState().selectedTokenSpan).toBeNull();
+  });
+
+  it('navigates passages in a multi-item set .txt and scopes replacements + undo to the active passage', async () => {
+    mockProfileDocument.mockImplementation(
+      async (req: { sourceId: string; sourceName: string; text: string }) =>
+        makeMockProfile(req.sourceId, req.sourceName, req.text),
+    );
+
+    const setFile: TargetFileItem = {
+      id: 'set1',
+      name: 'exam_set.txt',
+      path: 'exam_set.txt',
+      sourceType: 'txt',
+      content: '[18]\nFirst passage text\n---\n[19]\nSecond passage words',
+      sizeBytes: 50,
+      addedAt: 1,
+    };
+
+    await useProfilerStore.getState().addTargetFiles([setFile]);
+    expect(useProfilerStore.getState().activeProfile?.originalText).toBe(
+      'First passage text',
+    );
+    expect(useProfilerStore.getState().activeProfile?.sourceId).toBe('set1#p0');
+
+    // Navigate to next passage ([19])
+    await useProfilerStore.getState().stepActivePassage('next');
+    expect(useProfilerStore.getState().filePassageIndices.set1).toBe(1);
+    expect(useProfilerStore.getState().activeProfile?.originalText).toBe(
+      'Second passage words',
+    );
+    expect(useProfilerStore.getState().activeProfile?.sourceId).toBe('set1#p1');
+
+    // Replace token 0 ('Second') in passage 2 -> passage 1 must remain intact
+    await useProfilerStore
+      .getState()
+      .applyTokenSpanReplacement(0, 0, 'Updated');
+    const updatedContent = useProfilerStore.getState().targetFiles[0].content;
+    expect(updatedContent).toBe(
+      '[18]\nFirst passage text\n---\n[19]\nUpdated passage words',
+    );
+    expect(useProfilerStore.getState().activeProfile?.originalText).toBe(
+      'Updated passage words',
+    );
+
+    // Undo restores passage 2 while staying on passage 2
+    useProfilerStore.getState().undoInlineText();
+    expect(useProfilerStore.getState().targetFiles[0].content).toBe(
+      '[18]\nFirst passage text\n---\n[19]\nSecond passage words',
+    );
+    expect(useProfilerStore.getState().filePassageIndices.set1).toBe(1);
   });
 });
