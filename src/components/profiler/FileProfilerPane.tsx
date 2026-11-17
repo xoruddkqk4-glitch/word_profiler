@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { countWordsMsWordStyle } from '../../core/tokenizer';
 import {
+  consumeInputFiles,
   formatFileReadErrors,
   readTargetFilesFromBrowser,
 } from '../../io/fileReaders';
@@ -229,14 +230,15 @@ export const FileProfilerPane: React.FC<FileProfilerPaneProps> = ({
                   multiple
                   hidden
                   onChange={async (e) => {
-                    const files = e.target.files;
-                    e.target.value = '';
-                    if (!files?.length) return;
+                    const files = consumeInputFiles(e.currentTarget);
+                    if (files.length === 0) return;
                     const { items, errors } =
                       await readTargetFilesFromBrowser(files);
                     const readErr = formatFileReadErrors(errors);
                     if (readErr) {
                       store.setErrorBanner(readErr);
+                    } else if (items.length > 0 && store.errorBanner) {
+                      store.dismissErrorBanner();
                     }
                     if (items.length > 0) {
                       await store.addTargetFiles(items);

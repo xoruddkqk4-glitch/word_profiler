@@ -32,22 +32,51 @@ function loadPdfJs(): Promise<typeof import('pdfjs-dist')> {
   return pdfjsPromise;
 }
 
+/**
+ * Snapshots a `<input type="file">` element's live `FileList` into a static
+ * `File[]` array *before* resetting `input.value = ''` (resetting `value`
+ * mutates the live `FileList` to empty in Chromium/Electron).
+ */
+export function consumeInputFiles(
+  input: Pick<HTMLInputElement, 'files' | 'value'>,
+): File[] {
+  const files = input.files ? Array.from(input.files) : [];
+  input.value = '';
+  return files;
+}
+
+function normalizeDecodedText(text: string): string {
+  return text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
 export function decodeTextBufferSmart(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
+  // Detect UTF-16 LE / BE BOMs (Windows Notepad / PowerShell Out-File)
+  if (bytes.length >= 2) {
+    if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+      return normalizeDecodedText(
+        new TextDecoder('utf-16le', { fatal: false }).decode(bytes),
+      );
+    }
+    if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+      return normalizeDecodedText(
+        new TextDecoder('utf-16be', { fatal: false }).decode(bytes),
+      );
+    }
+  }
   // Strip UTF-8 BOM if present
   try {
     const utf8 = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    return utf8.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    return normalizeDecodedText(utf8);
   } catch {
     // Fallback for Korean EUC-KR / CP949 legacy text files
     try {
       const euckr = new TextDecoder('euc-kr', { fatal: false }).decode(bytes);
-      return euckr.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      return normalizeDecodedText(euckr);
     } catch {
-      return new TextDecoder('utf-8', { fatal: false })
-        .decode(bytes)
-        .replace(/\r\n/g, '\n')
-        .replace(/\r/g, '\n');
+      return normalizeDecodedText(
+        new TextDecoder('utf-8', { fatal: false }).decode(bytes),
+      );
     }
   }
 }

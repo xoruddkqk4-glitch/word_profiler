@@ -21,6 +21,7 @@ import {
   copyTextSafe,
 } from '../../io/docExporters';
 import {
+  consumeInputFiles,
   formatFileReadErrors,
   readTargetFilesFromBrowser,
 } from '../../io/fileReaders';
@@ -401,13 +402,14 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
         multiple
         hidden
         onChange={async (e) => {
-          const files = e.target.files;
-          e.target.value = '';
-          if (!files?.length) return;
+          const files = consumeInputFiles(e.currentTarget);
+          if (files.length === 0) return;
           const { items, errors } = await readTargetFilesFromBrowser(files);
           const readErr = formatFileReadErrors(errors);
           if (readErr) {
             store.setErrorBanner(readErr);
+          } else if (items.length > 0 && store.errorBanner) {
+            store.dismissErrorBanner();
           }
           if (items.length > 0) {
             await store.addTargetFiles(items);

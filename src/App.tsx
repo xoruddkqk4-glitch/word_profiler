@@ -9,6 +9,7 @@ import {
   copyRichTextSafe,
 } from './io/docExporters';
 import {
+  consumeInputFiles,
   formatFileReadErrors,
   readTargetFilesFromBrowser,
   readWordlistFilesFromBrowser,
@@ -209,8 +210,8 @@ export const App: React.FC = () => {
     e.preventDefault();
     dragDepthRef.current = 0;
     setDragOverlay(false);
-    const files = e.dataTransfer.files;
-    if (!files || files.length === 0) return;
+    const files = Array.from(e.dataTransfer.files ?? []);
+    if (files.length === 0) return;
 
     const dropZone = (e.target as HTMLElement | null)?.closest?.(
       '[data-drop-kind]',
@@ -255,13 +256,14 @@ export const App: React.FC = () => {
         multiple
         hidden
         onChange={async (e) => {
-          const files = e.target.files;
-          e.target.value = '';
-          if (!files?.length) return;
+          const files = consumeInputFiles(e.currentTarget);
+          if (files.length === 0) return;
           const { items, errors } = await readTargetFilesFromBrowser(files);
           const readErr = formatFileReadErrors(errors);
           if (readErr) {
             store.setErrorBanner(readErr);
+          } else if (items.length > 0 && store.errorBanner) {
+            store.dismissErrorBanner();
           }
           if (items.length > 0) {
             await store.addTargetFiles(items);

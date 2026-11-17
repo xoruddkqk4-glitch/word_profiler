@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { isManifestEntryLoaded } from '../../core/wordlistParser';
 import {
+  consumeInputFiles,
   formatFileReadErrors,
   readWordlistFilesFromBrowser,
 } from '../../io/fileReaders';
@@ -132,8 +133,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ widthPx }) => {
           e.stopPropagation();
           listDragDepthRef.current = 0;
           setListDropActive(false);
-          const files = e.dataTransfer.files;
-          if (files?.length) void handleWordlistFiles(files);
+          const files = Array.from(e.dataTransfer.files ?? []);
+          if (files.length > 0) void handleWordlistFiles(files);
         }}
       >
         <div className="section-header">
@@ -223,9 +224,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ widthPx }) => {
           multiple
           hidden
           onChange={async (e) => {
-            const files = e.target.files;
-            e.target.value = '';
-            if (!files?.length) return;
+            const files = consumeInputFiles(e.currentTarget);
+            if (files.length === 0) return;
             await handleWordlistFiles(files);
           }}
         />

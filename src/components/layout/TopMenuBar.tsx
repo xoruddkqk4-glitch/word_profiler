@@ -30,6 +30,7 @@ import {
   exportRawTextAsTxt,
 } from '../../io/docExporters';
 import {
+  consumeInputFiles,
   decodeTextBufferSmart,
   formatFileReadErrors,
   readTargetFilesFromBrowser,
@@ -117,20 +118,22 @@ export const TopMenuBar: React.FC = () => {
     setOpenMenu(key);
   };
 
-  const handleOpenTargetFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+  const handleOpenTargetFiles = async (files: File[]) => {
+    if (files.length === 0) return;
     const { items, errors } = await readTargetFilesFromBrowser(files);
     const readErr = formatFileReadErrors(errors);
     if (readErr) {
       store.setErrorBanner(readErr);
+    } else if (items.length > 0 && store.errorBanner) {
+      store.dismissErrorBanner();
     }
     if (items.length > 0) {
       await store.addTargetFiles(items);
     }
   };
 
-  const handleOpenRefLists = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+  const handleOpenRefLists = async (files: File[]) => {
+    if (files.length === 0) return;
     const { lists, errors } = await readWordlistFilesFromBrowser(files);
     const readErr = formatFileReadErrors(errors);
     if (lists.length > 0) {
@@ -312,8 +315,7 @@ export const TopMenuBar: React.FC = () => {
         multiple
         hidden
         onChange={(e) => {
-          void handleOpenTargetFiles(e.target.files);
-          e.target.value = '';
+          void handleOpenTargetFiles(consumeInputFiles(e.currentTarget));
         }}
       />
       <input
@@ -322,8 +324,7 @@ export const TopMenuBar: React.FC = () => {
         multiple
         hidden
         onChange={(e) => {
-          void handleOpenTargetFiles(e.target.files);
-          e.target.value = '';
+          void handleOpenTargetFiles(consumeInputFiles(e.currentTarget));
         }}
       />
       <input
@@ -333,8 +334,7 @@ export const TopMenuBar: React.FC = () => {
         multiple
         hidden
         onChange={(e) => {
-          void handleOpenRefLists(e.target.files);
-          e.target.value = '';
+          void handleOpenRefLists(consumeInputFiles(e.currentTarget));
         }}
       />
       <input
@@ -343,8 +343,7 @@ export const TopMenuBar: React.FC = () => {
         accept=".txt,.tsv,.lst"
         hidden
         onChange={async (e) => {
-          const f = e.target.files?.[0];
-          e.target.value = '';
+          const [f] = consumeInputFiles(e.currentTarget);
           if (!f) return;
           const content = decodeTextBufferSmart(await f.arrayBuffer());
           await store.loadCustomIgnoreList(f.name, f.name, content);
@@ -356,8 +355,7 @@ export const TopMenuBar: React.FC = () => {
         accept=".txt,.tsv,.lst"
         hidden
         onChange={async (e) => {
-          const f = e.target.files?.[0];
-          e.target.value = '';
+          const [f] = consumeInputFiles(e.currentTarget);
           if (!f) return;
           const content = decodeTextBufferSmart(await f.arrayBuffer());
           await store.loadCustomMasterList(f.name, f.name, content);
@@ -369,8 +367,7 @@ export const TopMenuBar: React.FC = () => {
         accept=".ini,.json,.txt"
         hidden
         onChange={async (e) => {
-          const f = e.target.files?.[0];
-          e.target.value = '';
+          const [f] = consumeInputFiles(e.currentTarget);
           if (!f) return;
           try {
             const raw = decodeTextBufferSmart(await f.arrayBuffer());

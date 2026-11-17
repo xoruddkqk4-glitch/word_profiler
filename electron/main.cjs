@@ -1,6 +1,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { app, BrowserWindow, Menu, protocol, screen, shell } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  Menu,
+  protocol,
+  screen,
+  session,
+  shell,
+} = require('electron');
 
 const APP_SCHEME = 'app';
 const APP_HOST = 'antwordprofiler';
@@ -34,6 +42,7 @@ protocol.registerSchemesAsPrivileged([
       supportFetchAPI: true,
       corsEnabled: true,
       stream: true,
+      codeCache: true,
     },
   },
 ]);
@@ -118,11 +127,14 @@ function registerAppProtocol() {
 
     try {
       const data = await fs.promises.readFile(filePath);
+      const isHashedAsset = relativeSubpath.startsWith('assets/');
       return new Response(data, {
         status: 200,
         headers: {
           'Content-Type': getMimeType(filePath),
-          'Cache-Control': 'no-cache',
+          'Cache-Control': isHashedAsset
+            ? 'public, max-age=31536000, immutable'
+            : 'no-cache',
         },
       });
     } catch (err) {
@@ -244,9 +256,44 @@ function createMainWindow() {
   void win.loadURL(startUrl);
 }
 
+const ALLOWED_CLIPBOARD_PERMISSIONS = new Set([
+  'clipboard-read',
+  'clipboard-sanitized-write',
+]);
+
+function configureClipboardPermissions() {
+  const expectedOriginPrefix = `${APP_SCHEME}://${APP_HOST}`;
+  session.defaultSession.setPermissionCheckHandler(
+    (_webContents, permission, requestingOrigin) => {
+      if (
+        ALLOWED_CLIPBOARD_PERMISSIONS.has(permission) &&
+        typeof requestingOrigin === 'string' &&
+        requestingOrigin.startsWith(expectedOriginPrefix)
+      ) {
+        return true;
+      }
+      return false;
+    },
+  );
+  session.defaultSession.setPermissionRequestHandler(
+    (webContents, permission, callback) => {
+      const url = webContents?.getURL?.() || '';
+      if (
+        ALLOWED_CLIPBOARD_PERMISSIONS.has(permission) &&
+        url.startsWith(expectedOriginPrefix)
+      ) {
+        callback(true);
+        return;
+      }
+      callback(false);
+    },
+  );
+}
+
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return;
   registerAppProtocol();
+  configureClipboardPermissions();
   createMainWindow();
 });
 
