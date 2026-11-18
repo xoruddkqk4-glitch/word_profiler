@@ -40,10 +40,10 @@
 
 ### 5. Google Gemini (무료 지원) · OpenRouter 기반 AI 어휘 도우미 (`src/ai/`)
 - **이중 API 제공자 및 브라우저 직접 호출**: 백엔드 서버·DB 없이 무료 티어를 제공하는 **Google Gemini API (`Google AI Studio`)** 또는 **OpenRouter API**를 선택해 브라우저에서 직접 호출하며, 두 API 키를 독립적으로 보관·삭제할 수 있습니다. 모든 추천 후보와 패러프레이즈 토큰은 로컬 `lexiconVerifier`로 활성 단어장 등재 여부를 결정론적으로 대조 검증합니다.
-- **통합 4종 AI 어휘 추천 모달 (`AiSuggestionModal` · 단어 3+3 & 문장 3+3) & 형광 강조**: 단일 API 호출로 **Word List 내 추천 단어 3개 · 리스트 외 허용 대체 단어 3개 · Word List 내 패러프레이즈 3개 · 리스트 외 포함 패러프레이즈 3개**를 동시에 생성해 상단 트랙 필터(`전체 보기` / `Word List 내` / `Word List 외 확장`)와 CSS Grid `subgrid` 좌·우 오와 열 정렬로 표시하며, 원문 문장의 선택 어휘와 카드 미리보기의 치환 어휘에 **노란색 형광펜 배경(`.ai-highlight-mark`)**을 칠해 직관적으로 식별할 수 있습니다. 로딩 중에는 회전 스피너·초록 맥박·`0.1초` 타이머·왕복 진행 바·쉬머 스켈레톤을 제공하고, 대형 창(`min(1620px, 94vw)`) 헤더 포인터 드래그 이동을 지원합니다.
-- **`영어/우리말` 한·영 문장 양방향 연동 대조 모달 (`BilingualTranslationModal`)**: 에디터 툴바의 `영어/우리말` 클릭 시 대형 창에서 좌측 영어 원문·우측 AI 우리말 해석을 나란히 표시하며, 영어 문장을 클릭하면 대응하는 우리말 문장이, 우리말 문장을 클릭하면 대응하는 영어 문장이 양방향 하이라이트·자동 스크롤됩니다(`줄글 보기` / `문장별 정렬` 전환, 우리말 직접 수정, 수정 가능한 `우리말 해석 원칙` 프롬프트 내장, `[우리말 해석]` 블록 `.txt` 함께 저장 및 재로드 시 영어 어휘 통계 무오염 자동 분리 지원).
-- **혼잡 자동 우회 & 초저지연 병렬 추론**: Gemini `GET /v1beta/models/<id>` 즉시 연결 확인, `HTTP 503` 요청 폭주 및 `5.5초` 응답 지연 시 경량 백업 무료 모델(`gemini-3.5-flash-lite` 등) 즉시 자동 페일오버(60초 쿨다운 기억), Gemini 세대별 추론 최적화(Gemini 3/4 `thinkingLevel: "LOW"`, Gemini 2.5 `thinkingBudget: 0`), OpenRouter `provider.sort: "latency"` + `reasoning: { effort: "minimal", exclude: true }`, 지문 해석 최대 4배치 병렬 호출(`{ "t": [...] }` 경량 스키마 + 완료 배치 즉시 점진 렌더링 `onPartialUpdate`) 및 `localStorage` 영속 캐시를 지원합니다.
-- **어근·기본형 형태소 병렬 대조 (`analyzeMorphologyAndRoots`)**: 로컬 `Master Family` 파생어군 로드와 AI 형태소 호출을 병렬 실행해 선택 단어의 문맥 품사 및 기본형·파생 기반어·어근의 활성 단어장 등재 여부를 빠르게 대조합니다.
+- **통합 4종 AI 어휘 추천 모달 (`AiSuggestionModal` · 단어 3+3 & 문장 3+3) & 형광 강조**: 단일 API 호출로 **Word List 내 추천 단어 3개 · 리스트 외 허용 대체 단어 3개 · Word List 내 패러프레이즈 3개(`outWordCount === 0`만) · 리스트 외 포함 패러프레이즈 3개**를 동시에 생성해 상단 트랙 필터(`전체 보기` / `Word List 내` / `Word List 외 확장`)와 CSS Grid `subgrid` 좌·우 오와 열 정렬로 표시하며, 원문 문장의 선택 어휘와 카드 미리보기의 치환 어휘에 **노란색 형광펜 배경(`.ai-highlight-mark`)**을 칠해 직관적으로 식별할 수 있습니다. 로딩 중에는 회전 스피너·초록 맥박·`0.1초` 타이머·왕복 진행 바·쉬머 스켈레톤을 제공하고, 대형 창(`min(1620px, 94vw)`) 헤더 포인터 드래그 이동을 지원합니다.
+- **`영어/우리말` 한·영 문장 양방향 연동 대조 모달 (`BilingualTranslationModal`)**: 에디터 툴바의 `영어/우리말` 클릭 시 대형 창에서 좌측 영어 원문·우측 AI 우리말 해석을 나란히 표시하며, 영어 문장을 클릭하면 대응하는 우리말 문장이, 우리말 문장을 클릭하면 대응하는 영어 문장이 양방향 하이라이트·자동 스크롤됩니다(`줄글 보기` / `문장별 정렬` 전환, 우리말 직접 수정, 수정 가능한 `우리말 해석 원칙` 프롬프트 내장, `[우리말 해석]` 블록 `.txt` 함께 저장 및 재로드 시 영어 어휘 통계 무오염 자동 분리 지원). 지문 전환·본문 편집·AI 세션 리셋 시 진행 중 해석 요청을 함께 취소합니다.
+- **혼잡 자동 우회 & 초저지연 병렬 추론**: Gemini `GET /v1beta/models/<id>` 즉시 연결 확인, `HTTP 503` 요청 폭주 및 `5.5초` 응답 지연 시 경량 백업 무료 모델(`gemini-3.5-flash-lite` 등) 즉시 자동 페일오버(60초 쿨다운 기억), Gemini 세대별 추론 최적화(Gemini 3/4 `thinkingLevel: "LOW"`, Gemini 2.5 `thinkingBudget: 0`), OpenRouter `provider.sort: "latency"` + `reasoning: { effort: "minimal", exclude: true }`(무관한 HTTP 400은 fast-params 영구 비활성화하지 않음), 지문 해석 최대 4배치 병렬 호출(`{ "t": [...] }` 경량 스키마 + 완료 배치 즉시 점진 렌더링 `onPartialUpdate`) 및 provider·model 포함 `localStorage` 영속 캐시를 지원합니다.
+- **어근·기본형 형태소 병렬 대조 (`analyzeMorphologyAndRoots`)**: 로컬 `Master Family` 파생어군 로드와 AI 형태소 호출을 병렬 실행해 선택 단어의 문맥 품사 및 기본형·파생 기반어·어근의 활성 단어장 등재 여부를 빠르게 대조하며, 문서가 바뀐 뒤에는 stale 결과를 표시하지 않습니다.
 
 ---
 
@@ -214,3 +214,13 @@ npm run exe:build
   - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
   - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 12개 테스트 파일 / 73개 테스트 전원 통과 — `sentenceSegmenter.test.ts` 6건, `passageTranslationService.test.ts` 병렬 배치·부분 렌더링·캐시 포함 3건, `useProfilerStore.test.ts` `[우리말 해석]` `.txt` 왕복 복원·통계 분리 테스트 포함).
   - Windows `.exe` 재빌드 검증 통과: `npm run exe:build` (`tsc -b && vite build && electron-builder --win portable`, Exit Code 0 — `release/AntWordProfiler-Portable.exe` 및 `release/win-unpacked/AntWordProfiler.exe` 최신 생성 확인).
+
+## [2026-11-18 11:10] 업데이트 이력 (Commit ID: `436c2a4`)
+- **수정 내용** *(웹앱 `src/**` 우선 반영 — Windows `.exe` 리빌드는 요청 시 별도 진행)*:
+  - **대역 해석(bilingual) abort 통합**: `abortAndResetAiSession`이 lexical AI와 함께 bilingual in-flight 요청을 취소하고 `bilingualLoading`을 해제. 지문 전환(`setActivePassageIndex`)·본문 편집(`updateInlineText` / `commitActiveDocumentText`) 시에도 진행 중 해석이 옛 `slotKey`에 쓰이지 않도록 정리.
+  - **OpenRouter HTTP 400 호환 폴백 축소**: `requestWithCompatibilityFallback`에서 `invalid|unknown|unrecognized` 등 과도한 매칭을 제거하고 `response_format` / JSON mode / reasoning 계열만 plain 모드로 재시도·캐시. 무관한 400이 fast-params를 영구 비활성화하지 않도록 부정 테스트 추가.
+  - **AI 추천 Group C·B 라벨 계약 엄격화**: Word List 내 패러프레이즈는 `outWordCount === 0`만 유지(리스트 외 문장으로 슬롯을 채우던 완화 제거), Group B는 리스트 외 후보만 채움. 리스트 외 패러프레이즈는 Group D로 라우팅하고 모달 카피를 맞춤.
+  - **번역 캐시·형태소 stale 가드**: `buildTranslationResultCacheKey`에 `provider`+`modelId` 포함(모델 변경 시 캐시 미스). 형태소 결과 적용 전 `assertProfileStillCurrent`로 문서 텍스트 불일치 시 결과 폐기.
+- **검증 결과**:
+  - TypeScript 정적 타입 검사 통과: `npm run type-check` (`npx tsc --noEmit`, Exit Code 0, 오류 0건).
+  - 단위 및 회귀 테스트 통과: `npm test` (`npx vitest run`, 12개 테스트 파일 / 77개 테스트 전원 통과 — OpenRouter 무관 400 비폴백, 번역 캐시 model miss, Group C `outWordCount===0`, bilingual 로딩 해제·형태소 stale 거부 테스트 포함).
