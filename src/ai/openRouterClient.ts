@@ -1044,11 +1044,13 @@ async function requestWithCompatibilityFallback(params: {
     useFastParams: shouldUseFast,
   });
 
+  // Only retry/plain-fallback for known fast-param capability rejections.
+  // Generic 400s (auth, quota, schema, max_tokens, …) must not permanently disable fast params.
   if (
     shouldUseFast &&
     !attempt.ok &&
     attempt.status === 400 &&
-    /response_format|json_object|json mode|reasoning|effort|minimal|exclude|provider|sort|not supported|invalid|unknown|unrecognized/i.test(
+    /response_format|json_object|json[\s_-]?mode|reasoning|effort|minimal|exclude|provider\.?sort|provider/i.test(
       attempt.detail,
     )
   ) {

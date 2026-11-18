@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DocumentProfileResult, TargetFileItem } from '../types/domain';
 
 const mockProfileDocument = vi.fn();
+const mockAnalyzeMorphologyAndRoots = vi.fn();
 
 vi.mock('../workers/workerClient', () => ({
   profilerWorkerClient: {
@@ -12,6 +13,17 @@ vi.mock('../workers/workerClient', () => ({
     exportLevelGroups: vi.fn(),
   },
 }));
+
+vi.mock('../ai/lexicalAssistantService', async () => {
+  const actual = await vi.importActual<
+    typeof import('../ai/lexicalAssistantService')
+  >('../ai/lexicalAssistantService');
+  return {
+    ...actual,
+    analyzeMorphologyAndRoots: (...args: unknown[]) =>
+      mockAnalyzeMorphologyAndRoots(...args),
+  };
+});
 
 import { useProfilerStore } from './useProfilerStore';
 
@@ -73,6 +85,7 @@ function makeMockProfile(
 describe('useProfilerStore editor & safety invariants', () => {
   beforeEach(() => {
     mockProfileDocument.mockReset();
+    mockAnalyzeMorphologyAndRoots.mockReset();
     useProfilerStore.setState({
       targetFiles: [],
       fileHistories: {},
@@ -95,6 +108,7 @@ describe('useProfilerStore editor & safety invariants', () => {
       aiSuggestionModalOpen: false,
       bilingualModalOpen: false,
       bilingualLoading: false,
+      bilingualProgress: null,
       bilingualError: null,
       savedTranslations: {},
     });
@@ -347,5 +361,98 @@ describe('useProfilerStore editor & safety invariants', () => {
     expect(fullExport.translatedCount).toBe(2);
     expect(fullExport.text).toContain('[우리말 해석]\n첫 번째 영어 문장이다.');
     expect(fullExport.text).toContain('[우리말 해석]\n두 번째 영어 문장이다.');
+  });
+
+  it('clears bilingual loading when switching passages or editing active text', async () => {
+    mockProfileDocument.mockImplementation(
+      async (req: { sourceId: string; sourceName: string; text: string }) =>
+        makeMockProfile(req.sourceId, req.sourceName, req.text),
+    );
+
+    const setFile: TargetFileItem = {
+      id: 'race1',
+      name: 'race_set.txt',
+      path: 'race_set.txt',
+      sourceType: 'txt',
+      content: '[18]\nFirst English passage\n---\n[19]\nSecond English passage',
+      sizeBytes: 60,
+      addedAt: 1,
+    };
+
+    await useProfilerStore.getState().addTargetFiles([setFile]);
+    useProfilerStore.setState({
+      bilingualModalOpen: true,
+      bilingualLoading: true,
+      bilingualProgress: { done: 1, total: 3 },
+    });
+
+    await useProfilerStore.getState().setActivePassageIndex(1);
+    expect(useProfilerStore.getState().bilingualLoading).toBe(false);
+    expect(useProfilerStore.getState().bilingualProgress).toBeNull();
+
+    useProfilerStore.setState({
+      bilingualLoading: true,
+      bilingualProgress: { done: 0, total: 2 },
+    });
+    useProfilerStore
+      .getState()
+      .updateActiveEditableText('Second English passage edited');
+    expect(useProfilerStore.getState().bilingualLoading).toBe(false);
+    expect(useProfilerStore.getState().bilingualProgress).toBeNull();
+  });
+
+  it('rejects morphology results when document text diverges from the source profile', async () => {
+    const profile = makeMockProfile('__inline__', 'Inline Text', 'Hello world');
+    useProfilerStore.setState({
+      activeTargetFileId: null,
+      inlineEditorOpen: true,
+      inlineText: 'Hello world',
+      inlineHistory: ['Hello world'],
+      inlineHistoryIndex: 0,
+      activeProfile: profile,
+      editorMode: 'profiled',
+      selectedTokenSpan: { startTokenIdx: 0, endTokenIdx: 0, rawText: 'Hello' },
+      selectedWordKey: 'hello',
+      selectedRawToken: 'Hello',
+      referenceLists: [
+        {
+          id: 'ref1',
+          name: 'L1',
+          path: 'L1.txt',
+          content: 'hello\nworld',
+          enabled: true,
+          colorLight: '#fff',
+          colorDark: '#000',
+          isBuiltin: false,
+        },
+      ],
+      openRouterConfig: {
+        provider: 'gemini',
+        apiKey: '',
+        storageMode: 'session',
+        modelId: 'google/gemini-3.8-flash',
+        geminiApiKey: 'AIzaTest',
+        geminiModelId: 'gemini-3.8-flash',
+      },
+    });
+
+    mockAnalyzeMorphologyAndRoots.mockImplementation(async () => {
+      // Simulate an edit while the request is in flight
+      useProfilerStore.getState().updateInlineText('Hello world edited');
+      return {
+        targetToken: 'Hello',
+        enclosingSentence: 'Hello world',
+        contextPos: 'noun',
+        explanationKo: 'mock',
+        candidates: [],
+      };
+    });
+
+    await useProfilerStore.getState().runAiMorphologyCheck();
+
+    const st = useProfilerStore.getState();
+    expect(st.morphologyResult).toBeNull();
+    expect(st.aiLoading).toBe(false);
+    expect(st.aiError).toContain('문서가 변경되어');
   });
 });

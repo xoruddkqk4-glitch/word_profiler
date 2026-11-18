@@ -200,13 +200,16 @@ interface StoredTranslationResultEntry {
 function buildTranslationResultCacheKey(
   englishText: string,
   customPrompt: string,
+  config: OpenRouterConfig,
 ): string {
   const cleanEn = extractSavedTranslationFromPassage(englishText).englishContent;
   const normEn = normalizeCacheText(cleanEn);
   const normPrompt = normalizeCacheText(
     customPrompt.trim() || DEFAULT_TRANSLATION_PROMPT,
   );
-  return `${normEn.length}:${fnv1aHex(normEn)}|${normPrompt.length}:${fnv1aHex(normPrompt)}`;
+  const provider = getActiveAiProvider(config);
+  const modelId = getActiveAiModelId(config);
+  return `${normEn.length}:${fnv1aHex(normEn)}|${normPrompt.length}:${fnv1aHex(normPrompt)}|${provider}|${modelId}`;
 }
 
 function readTranslationResultCacheMap(): Record<
@@ -230,6 +233,7 @@ function readTranslationResultCacheMap(): Record<
 export function lookupCachedTranslationResult(
   englishText: string,
   customPrompt: string,
+  config: OpenRouterConfig,
 ): SavedPassageTranslation | null {
   if (typeof window === 'undefined') return null;
   const cleanEnglish =
@@ -237,7 +241,7 @@ export function lookupCachedTranslationResult(
   const segments = segmentEnglishSentences(cleanEnglish);
   if (segments.length === 0) return null;
 
-  const key = buildTranslationResultCacheKey(cleanEnglish, customPrompt);
+  const key = buildTranslationResultCacheKey(cleanEnglish, customPrompt, config);
   const hit = readTranslationResultCacheMap()[key];
   if (
     !hit ||
@@ -267,11 +271,12 @@ export function lookupCachedTranslationResult(
 function saveTranslationResultCacheEntry(
   englishText: string,
   customPrompt: string,
+  config: OpenRouterConfig,
   result: SavedPassageTranslation,
 ): void {
   if (typeof window === 'undefined' || result.pairs.length === 0) return;
   try {
-    const key = buildTranslationResultCacheKey(englishText, customPrompt);
+    const key = buildTranslationResultCacheKey(englishText, customPrompt, config);
     const map = readTranslationResultCacheMap();
     if (key in map) {
       delete map[key];
@@ -467,7 +472,11 @@ export async function translateEnglishPassage(params: {
     params.customPrompt.trim() || DEFAULT_TRANSLATION_PROMPT;
 
   if (!params.bypassCache) {
-    const cached = lookupCachedTranslationResult(cleanEnglish, effectivePrompt);
+    const cached = lookupCachedTranslationResult(
+      cleanEnglish,
+      effectivePrompt,
+      params.config,
+    );
     if (cached) {
       return cached;
     }
@@ -586,7 +595,12 @@ export async function translateEnglishPassage(params: {
     finalResult.koreanFullText,
     finalResult.pairs.map((p) => p.ko),
   );
-  saveTranslationResultCacheEntry(cleanEnglish, effectivePrompt, finalResult);
+  saveTranslationResultCacheEntry(
+    cleanEnglish,
+    effectivePrompt,
+    params.config,
+    finalResult,
+  );
 
   return finalResult;
 }

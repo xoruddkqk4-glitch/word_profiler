@@ -730,7 +730,7 @@ export const AiSuggestionModal: React.FC = () => {
                     badgeText: 'Word List 내',
                     title: '활성 단어장 범위 추천',
                     subtitle:
-                      '왼쪽 활성 Word List 어휘만으로 검증된 대체 단어와 패러프레이즈입니다.',
+                      '활성 Word List 어휘만으로 로컬 검증을 통과한 후보입니다. 패러프레이즈는 리스트 외 단어 0개만 표시합니다.',
                     wordHeading: 'Word List 내 추천 단어',
                     paraHeading: 'Word List 내 패러프레이즈',
                     synonyms: result.inListSynonymCandidates,
@@ -738,7 +738,7 @@ export const AiSuggestionModal: React.FC = () => {
                     emptyWordHint:
                       '활성 Word List 안에서 이 자리에 바로 넣을 수 있는 단어를 찾지 못했습니다.',
                     emptyParaHint:
-                      '활성 Word List 내 패러프레이즈를 생성하지 못했습니다.',
+                      '활성 Word List만으로 검증된 패러프레이즈를 생성하지 못했습니다.',
                   })}
 
                 {(trackFilter === 'all' || trackFilter === 'free') &&

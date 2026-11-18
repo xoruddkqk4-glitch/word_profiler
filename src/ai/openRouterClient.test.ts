@@ -185,6 +185,50 @@ describe('callOpenRouterJson', () => {
     expect(res).toEqual({ ok: true });
   });
 
+  it('does not plain-fallback or cache unsupported fast params for unrelated HTTP 400 errors', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: { message: 'invalid request: max_tokens too large' },
+        }),
+        { status: 400 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      callOpenRouterJson<{ ok: boolean }>({
+        config: testConfig,
+        messages: [{ role: 'user', content: 'test' }],
+      }),
+    ).rejects.toThrow(/max_tokens|400/i);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // A subsequent call for the same model must still attempt fast params (not permanently disabled).
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: 'stop',
+              message: { content: '{"ok":true}' },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    const res = await callOpenRouterJson<{ ok: boolean }>({
+      config: testConfig,
+      messages: [{ role: 'user', content: 'retry' }],
+    });
+    expect(res).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+    expect(secondBody.response_format).toBeDefined();
+  });
+
   it('remembers unsupported fast params per model to avoid repeating HTTP 400 round-trips', async () => {
     const fetchMock = vi
       .fn()

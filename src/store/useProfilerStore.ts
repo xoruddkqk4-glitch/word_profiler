@@ -620,14 +620,17 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     combinedSuggestionResult: null as CombinedSuggestionResult | null,
   });
 
-  /** Abort in-flight AI and clear loading/error/results/modal together. */
+  /** Abort in-flight lexical + bilingual AI and clear loading/error/results/modal together. */
   const abortAndResetAiSession = () => {
     cancelActiveAiCall();
+    cancelActiveBilingualCall();
     aiSuggestionCache.clear();
     set({
       aiLoading: false,
       aiError: null,
       aiSuggestionModalOpen: false,
+      bilingualLoading: false,
+      bilingualProgress: null,
       ...clearAiResults(),
     });
   };
@@ -698,6 +701,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     if (ctx.isInline) {
       const cur = st.inlineHistory[st.inlineHistoryIndex] ?? '';
       if (nextFullText === cur) return false;
+      cancelActiveBilingualCall();
       const sliced = st.inlineHistory.slice(0, st.inlineHistoryIndex + 1);
       const capped = [...sliced.slice(-49), nextFullText];
       set({
@@ -706,6 +710,8 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         inlineHistory: capped,
         inlineHistoryIndex: capped.length - 1,
         statsStale: true,
+        bilingualLoading: false,
+        bilingualProgress: null,
       });
       return true;
     }
@@ -714,6 +720,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
     const targetFile = ctx.activeFile!;
     if (targetFile.content === nextFullText) return false;
 
+    cancelActiveBilingualCall();
     const existingHist = st.fileHistories[fileId] ?? {
       stack: [targetFile.content],
       index: 0,
@@ -740,6 +747,8 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         [fileId]: { stack: capped, index: capped.length - 1 },
       },
       statsStale: true,
+      bilingualLoading: false,
+      bilingualProgress: null,
     });
     return true;
   };
@@ -1796,6 +1805,8 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
       const { inlineHistory, inlineHistoryIndex, inlinePassageIndex } = get();
       const current = inlineHistory[inlineHistoryIndex] ?? '';
       if (nextText === current) return;
+      // Document text changed — cancel in-flight bilingual so results cannot land on stale English.
+      cancelActiveBilingualCall();
       const sliced = inlineHistory.slice(0, inlineHistoryIndex + 1);
       const capped = [...sliced.slice(-49), nextText];
       const nextPassages = parsePassageSet(nextText);
@@ -1809,6 +1820,8 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         inlineHistory: capped,
         inlineHistoryIndex: capped.length - 1,
         statsStale: true,
+        bilingualLoading: false,
+        bilingualProgress: null,
       });
     },
 
@@ -2801,13 +2814,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
 
         if (controller.signal.aborted) return;
 
-        const latest = get();
-        const latestProfile = latest.activeProfile;
-        if (
-          !latestProfile ||
-          latestProfile.sourceId !== sourceId ||
-          latestProfile.originalText !== sourceOriginalText
-        ) {
+        if (!assertProfileStillCurrent(sourceOriginalText, sourceId)) {
           set({
             aiLoading: false,
             aiError:
@@ -2871,6 +2878,7 @@ export const useProfilerStore = create<ProfilerStoreState>((set, get) => {
         const cached = lookupCachedTranslationResult(
           cleanEnglish,
           st.translationPrompt,
+          st.openRouterConfig,
         );
         if (cached) {
           cancelActiveBilingualCall();

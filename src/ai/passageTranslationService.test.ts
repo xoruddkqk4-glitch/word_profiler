@@ -199,4 +199,35 @@ describe('passageTranslationService', () => {
     expect(mockedCallOpenRouterJson).toHaveBeenCalledTimes(6);
     expect(refreshed.pairs[0].ko).toBe('1번.');
   });
+
+  it('misses translation result cache when provider or model changes', async () => {
+    const english = 'Caching depends on the active model identity.';
+
+    mockedCallOpenRouterJson.mockResolvedValueOnce({
+      t: ['캐시는 활성 모델 식별자에 의존한다.'],
+    });
+
+    await translateEnglishPassage({
+      englishText: english,
+      customPrompt: DEFAULT_TRANSLATION_PROMPT,
+      config: TEST_CONFIG,
+    });
+    expect(mockedCallOpenRouterJson).toHaveBeenCalledTimes(1);
+
+    mockedCallOpenRouterJson.mockResolvedValueOnce({
+      t: ['다른 모델로 다시 해석한 결과이다.'],
+    });
+
+    const otherModel = await translateEnglishPassage({
+      englishText: english,
+      customPrompt: DEFAULT_TRANSLATION_PROMPT,
+      config: {
+        ...TEST_CONFIG,
+        geminiModelId: 'gemini-2.5-flash',
+      },
+    });
+
+    expect(mockedCallOpenRouterJson).toHaveBeenCalledTimes(2);
+    expect(otherModel.pairs[0].ko).toBe('다른 모델로 다시 해석한 결과이다.');
+  });
 });

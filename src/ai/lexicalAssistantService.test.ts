@@ -116,7 +116,7 @@ beforeEach(() => {
 });
 
 describe('suggestReplacementsAndParaphrases paraphrase guarantee', () => {
-  it('returns best-audited paraphrases sorted by fewest out-of-list words without falsifying in-list counts', async () => {
+  it('keeps Group C (in-list paraphrases) at outWordCount === 0 and routes out-of-list rewrites to Group D', async () => {
     const profile = buildTestProfile([
       buildToken('The', ' ', 0),
       buildToken('esoteric', ' ', 1, 'out'),
@@ -180,19 +180,25 @@ describe('suggestReplacementsAndParaphrases paraphrase guarantee', () => {
       config: TEST_CONFIG,
     });
 
-    expect(mockedCallOpenRouterJson).toHaveBeenCalledTimes(1);
-    expect(res.paraphraseCandidates.length).toBeGreaterThanOrEqual(1);
-    expect(res.paraphraseCandidates[0].rewrittenText).toBe(
-      'The clear quiz worked well.',
+    // Pass 1 + optional Pass 2 repair when LLM only returns out-of-list paraphrases
+    expect(mockedCallOpenRouterJson.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(res.inListParaphraseCandidates.length).toBeGreaterThanOrEqual(1);
+    expect(
+      res.inListParaphraseCandidates.every((c) => c.outWordCount === 0),
+    ).toBe(true);
+    expect(res.inListParaphraseCandidates[0].rewrittenText).toBe(
+      'The simple test worked.',
     );
-    expect(res.paraphraseCandidates[0].outWordCount).toBe(1);
-    expect(res.paraphraseCandidates[0].remainingOutWords).toEqual(['quiz']);
-    expect(res.paraphraseCandidates[0].inTargetPercentage).toBeLessThan(100);
-    if (res.paraphraseCandidates.length > 1) {
-      expect(res.paraphraseCandidates[1].outWordCount).toBeGreaterThanOrEqual(
-        res.paraphraseCandidates[0].outWordCount,
-      );
-    }
+    expect(
+      res.freeParaphraseCandidates.some(
+        (c) => c.rewrittenText === 'The clear quiz worked well.',
+      ),
+    ).toBe(true);
+    expect(
+      res.freeParaphraseCandidates.find(
+        (c) => c.rewrittenText === 'The clear quiz worked well.',
+      )?.outWordCount,
+    ).toBe(1);
   });
 
   it('synthesizes a paraphrase from verified synonyms in 2 calls without extra rescue latency', async () => {

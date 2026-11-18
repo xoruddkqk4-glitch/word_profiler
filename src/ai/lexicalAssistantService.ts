@@ -954,48 +954,30 @@ export async function suggestReplacementsAndParaphrases(params: {
     usedSynKeys.add(key);
     freeSynonymCandidates.push(c);
   };
+  // Group B stays out-of-list only — never pad with in-list fillers (those belong in Group A).
   for (const c of freeSynPass.verified) {
     if (!c.allTokensWithinCap) pushFreeSynonym(c);
   }
   for (const c of inSynPass.verified) {
     if (!c.allTokensWithinCap) pushFreeSynonym(c);
-  }
-  for (const c of freeSynPass.verified) {
-    if (c.allTokensWithinCap) pushFreeSynonym(c);
-  }
-  for (const c of inSynPass.verified) {
-    if (c.allTokensWithinCap) pushFreeSynonym(c);
   }
 
-  // Assemble Group C: up to 3 Word-List-only paraphrases (strictly 0 out-words first + existing 5-tier rescue)
+  // Assemble Group C: up to 3 Word-List-only paraphrases (outWordCount === 0 only)
   const inParaMap = new Map<string, VerifiedParaphraseCandidate>();
   const addInPara = (c: VerifiedParaphraseCandidate) => {
+    if (c.outWordCount !== 0) return;
     if (inParaMap.size >= 3) return;
     const key = normalizeSentenceCompareKey(c.rewrittenText);
     if (!key || inParaMap.has(key)) return;
     inParaMap.set(key, c);
   };
 
-  // Tier C1: Strictly in-list (outWordCount === 0) paraphrases across both pools
+  // Tier C1: Strictly in-list paraphrases across both pools
   for (const c of [...inParaAudited, ...freeParaAudited]) {
-    if (c.outWordCount === 0) {
-      addInPara(c);
-    }
+    addInPara(c);
   }
 
-  // Tier C2: Fill remaining slots up to 3 from inParaAudited sorted by fewest out-of-list words
-  if (inParaMap.size < 3 && inParaAudited.length > 0) {
-    const sortedBest = [...inParaAudited].sort(
-      (a, b) =>
-        a.outWordCount - b.outWordCount ||
-        b.inTargetPercentage - a.inTargetPercentage,
-    );
-    for (const c of sortedBest) {
-      addInPara(c);
-    }
-  }
-
-  // Tier C3: Dedicated lightweight paraphrase rescue request only if Pass 2 did not already attempt it
+  // Tier C2: Dedicated lightweight paraphrase rescue request only if Pass 2 did not already attempt it
   if (
     inParaMap.size === 0 &&
     !attemptedParaphraseRepair &&
@@ -1042,17 +1024,15 @@ export async function suggestReplacementsAndParaphrases(params: {
       if (isAbortError(err, signal)) {
         throw err;
       }
-      // Fall through cleanly to local deterministic synthesis (Tier C4 / Tier C5)
+      // Fall through cleanly to local deterministic synthesis (Tier C3 / Tier C4)
     }
   }
 
-  // Tier C4: Deterministic local synthesis substituting verified synonym replacements into the sentence
+  // Tier C3: Deterministic local synthesis from in-list synonym replacements only
   if (inParaMap.size === 0) {
-    const synPool = [
-      ...inListSynonymCandidates,
-      ...inSynPass.verified,
-      ...freeSynonymCandidates,
-    ];
+    const synPool = [...inListSynonymCandidates, ...inSynPass.verified].filter(
+      (syn) => syn.allTokensWithinCap,
+    );
     for (const syn of synPool) {
       if (inParaMap.size >= 3) break;
       const synth = buildAuditedSlotParaphrase(
@@ -1064,7 +1044,9 @@ export async function suggestReplacementsAndParaphrases(params: {
     }
   }
 
-  // Tier C5: Absolute guarantee floor (>= 1 paraphrase entry always present)
+  // Tier C4: Absolute guarantee floor (>= 1 paraphrase entry always present).
+  // May include out-of-list tokens from the original sentence when no in-list rewrite exists;
+  // UI badges still report outWordCount honestly.
   if (inParaMap.size === 0 && enclosing.sentenceWithPunct.trim()) {
     const baselineText = enclosing.sentenceWithPunct.trim();
     const audit = auditParaphraseCandidateText(
@@ -1079,7 +1061,7 @@ export async function suggestReplacementsAndParaphrases(params: {
         styleLabelKo: '원문 기반 기준 문장',
         rewrittenText: baselineText,
         noteKo:
-          '대체 어휘 후보가 비어 있어 원문 어휘 구성을 표시합니다. 다시 추천을 눌러 재시도해 보세요.',
+          '활성 Word List만으로 대체 문장을 찾지 못해 원문 어휘 구성을 표시합니다. 다시 추천을 눌러 재시도해 보세요.',
         leadingWs: audit.leadingWs,
         tokens: audit.tokens,
         remainingOutWords: audit.remainingOutWords,
